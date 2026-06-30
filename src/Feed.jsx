@@ -7,6 +7,8 @@ function Feed() {
   const { user } = useAuth()
   const [posts, setPosts] = useState([])
   const [reactions, setReactions] = useState([])
+  const [profiles, setProfiles] = useState({}) // { userId: display_name }
+  const [follows, setFollows] = useState([])
   const [comments, setComments] = useState({})
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
@@ -48,8 +50,26 @@ function Feed() {
         .select('id, post_id, user_id')
         .in('post_id', postIds)
       setReactions(reactionData || [])
+
+      const userIds = [...new Set((postData || []).map((p) => p.user_id))]
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .in('id', userIds)
+
+      const profileMap = {}
+      ;(profileData || []).forEach((p) => { profileMap[p.id] = p.display_name })
+      setProfiles(profileMap)
+
+      const { data: followData } = await supabase
+        .from('follows')
+        .select('id, follower_id, following_id')
+        .in('following_id', userIds)
+      setFollows(followData || [])
     } else {
       setReactions([])
+      setProfiles({})
+      setFollows([])
     }
 
     setLoading(false)
@@ -134,6 +154,23 @@ function Feed() {
         .order('created_at', { ascending: true })
       setComments({ ...comments, [postId]: data || [] })
     }
+  }
+
+  function isFollowing(authorId) {
+    if (!user) return false
+    return follows.some((f) => f.follower_id === user.id && f.following_id === authorId)
+  }
+
+  async function toggleFollow(authorId) {
+    if (!user || authorId === user.id) return
+    const existing = follows.find((f) => f.follower_id === user.id && f.following_id === authorId)
+
+    if (existing) {
+      await supabase.from('follows').delete().eq('id', existing.id)
+    } else {
+      await supabase.from('follows').insert({ follower_id: user.id, following_id: authorId })
+    }
+    loadFeed()
   }
 
   function timeAgo(dateStr) {
@@ -236,6 +273,23 @@ function Feed() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {posts.map((post) => (
           <div key={post.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: post.post_type === 'visual' ? 0 : 14, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: post.post_type === 'visual' ? '12px 14px 0 14px' : 0, marginBottom: post.post_type === 'visual' ? 0 : 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+                {profiles[post.user_id] || 'CareFind User'}
+              </span>
+              {user && post.user_id !== user.id && (
+                <button
+                  onClick={() => toggleFollow(post.user_id)}
+                  style={{
+                    background: isFollowing(post.user_id) ? '#0f766e' : 'transparent',
+                    border: '1px solid #0f766e', borderRadius: 14, padding: '2px 10px',
+                    fontSize: 12, color: isFollowing(post.user_id) ? '#fff' : '#0f766e',
+                  }}
+                >
+                  {isFollowing(post.user_id) ? 'Following' : 'Follow'}
+                </button>
+              )}
+            </div>
             {post.post_type === 'visual' ? (
               <div style={{ background: themes[post.theme] || themes.teal, padding: 28, minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <p style={{ color: '#fff', fontSize: 20, fontWeight: 700, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>
