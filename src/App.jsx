@@ -49,6 +49,29 @@ function App() {
     setLoading(false)
   }
 
+  async function handleCategoryFilter(type) {
+    setLoading(true)
+    setSearched(true)
+    setMode('business')
+    setQuery('')
+
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('id, name, address, city, state, business_type, whatsapp')
+      .eq('visible_on_carefind', true)
+      .eq('business_type', type)
+
+    if (error) {
+      console.error('Category filter error:', error)
+      setResults([])
+    } else {
+      setResults(data || [])
+    }
+    setLoading(false)
+  }
+
+  const categories = ['pharmacy', 'hospital', 'dental', 'optical', 'wellness', 'skincare']
+
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>CareFind</h1>
@@ -92,6 +115,23 @@ function App() {
           Search
         </button>
       </form>
+
+      {mode === 'business' && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => handleCategoryFilter(cat)}
+              style={{
+                padding: '6px 12px', fontSize: 13, borderRadius: 20,
+                border: '1px solid #ccc', background: '#f5f5f5', color: '#333', textTransform: 'capitalize',
+              }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading && <p>Searching...</p>}
 
