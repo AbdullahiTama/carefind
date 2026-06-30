@@ -4,6 +4,8 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import BottomNav from './BottomNav.jsx'
 import { theme } from './lib/theme'
+import { wrapSelection, renderArticleHtml } from './lib/articleFormat'
+import { useRef } from 'react'
 
 function Feed() {
   const { user } = useAuth()
@@ -23,6 +25,7 @@ function Feed() {
   const [loading, setLoading] = useState(true)
   const [posting, setPosting] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const articleTextareaRef = useRef(null)
 
   const themes = {
     teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
@@ -232,6 +235,18 @@ function Feed() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20, paddingBottom: 90 }}>
+      <style>{`
+        .article-body p { margin: 0 0 14px 0; }
+        .article-body p:last-child { margin-bottom: 0; }
+        .article-body p:first-of-type::first-letter {
+          font-size: 2.6em; font-weight: 800; float: left; line-height: 0.85;
+          padding-right: 6px; padding-top: 4px; color: ${theme.tealDeep};
+        }
+        .article-body mark {
+          background: #fef9c3; color: #713f12; padding: 1px 4px; border-radius: 4px;
+        }
+        .article-body strong { font-weight: 800; color: ${theme.navy}; }
+      `}</style>
       <div style={{
         background: theme.heroGradient, margin: '-20px -20px 0 -20px', padding: '22px 20px 26px 20px',
         borderRadius: '0 0 28px 28px', color: '#fff',
@@ -333,18 +348,48 @@ function Feed() {
               />
             </div>
           ) : (
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={
-                postType === 'question' ? 'Ask your question...' :
-                postType === 'review' ? 'Share your experience with this product or service...' :
-                postType === 'article' ? 'Write your article...' :
-                'Share a health tip, ask a question...'
-              }
-              rows={postType === 'article' ? 8 : 3}
-              style={{ width: '100%', padding: 8, fontSize: 15, border: '1px solid #ccc', borderRadius: 8, fontFamily: 'inherit' }}
-            />
+            <>
+              {postType === 'article' && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => wrapSelection(articleTextareaRef, content, setContent, '**')}
+                    style={{
+                      padding: '5px 11px', borderRadius: 8, border: `1px solid ${theme.border}`,
+                      background: theme.bg, fontWeight: 800, fontSize: 13, color: theme.textMid,
+                    }}
+                  >
+                    B
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => wrapSelection(articleTextareaRef, content, setContent, '==')}
+                    style={{
+                      padding: '5px 11px', borderRadius: 8, border: `1px solid ${theme.border}`,
+                      background: '#fef9c3', fontWeight: 700, fontSize: 12, color: '#a16207',
+                    }}
+                  >
+                    Highlight
+                  </button>
+                  <span style={{ fontSize: 11, color: theme.textLight, alignSelf: 'center' }}>
+                    Select text, then tap to style
+                  </span>
+                </div>
+              )}
+              <textarea
+                ref={postType === 'article' ? articleTextareaRef : null}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder={
+                  postType === 'question' ? 'Ask your question...' :
+                  postType === 'review' ? 'Share your experience with this product or service...' :
+                  postType === 'article' ? 'Write your article... (separate paragraphs with a blank line)' :
+                  'Share a health tip, ask a question...'
+                }
+                rows={postType === 'article' ? 10 : 3}
+                style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: 'inherit' }}
+              />
+            </>
           )}
 
           {postType !== 'visual' && (
@@ -465,7 +510,15 @@ function Feed() {
                     {'★'.repeat(post.rating)}{'☆'.repeat(5 - post.rating)}
                   </p>
                 )}
-                <p style={{ margin: '8px 0 10px 0', whiteSpace: 'pre-wrap', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{post.content}</p>
+                {post.post_type === 'article' ? (
+                  <div
+                    className="article-body"
+                    style={{ margin: '10px 0 12px 0', fontSize: 15, color: theme.textDark, lineHeight: 1.75, fontFamily: 'Georgia, "Times New Roman", serif' }}
+                    dangerouslySetInnerHTML={{ __html: renderArticleHtml(post.content) }}
+                  />
+                ) : (
+                  <p style={{ margin: '8px 0 10px 0', whiteSpace: 'pre-wrap', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{post.content}</p>
+                )}
                 {post.image_url && (
                   <img src={post.image_url} alt="post" style={{ width: '100%', borderRadius: 12, marginBottom: 8 }} />
                 )}
