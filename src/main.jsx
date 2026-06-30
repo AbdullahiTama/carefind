@@ -11,6 +11,7 @@ import PublicProfile from './PublicProfile.jsx'
 import SavedPosts from './SavedPosts.jsx'
 import VerifyProfessional from './VerifyProfessional.jsx'
 import ClaimBusiness from './ClaimBusiness.jsx'
+import Dashboard from './Dashboard.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/saved" element={<SavedPosts />} />
           <Route path="/verify" element={<VerifyProfessional />} />
           <Route path="/claim-business" element={<ClaimBusiness />} />
+          <Route path="/dashboard" element={<Dashboard />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
