@@ -4,7 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import BottomNav from './BottomNav.jsx'
 import { theme } from './lib/theme'
-import { wrapSelection, renderArticleHtml } from './lib/articleFormat'
+import { wrapBold, wrapItalic, wrapHighlight, renderArticleHtml } from './lib/articleFormat'
 import { useRef } from 'react'
 
 function Feed() {
@@ -26,6 +26,7 @@ function Feed() {
   const [posting, setPosting] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const articleTextareaRef = useRef(null)
+  const [highlightColor, setHighlightColor] = useState('#fde68a')
 
   const themes = {
     teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
@@ -350,30 +351,53 @@ function Feed() {
           ) : (
             <>
               {postType === 'article' && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                  <button
-                    type="button"
-                    onClick={() => wrapSelection(articleTextareaRef, content, setContent, '**')}
-                    style={{
-                      padding: '5px 11px', borderRadius: 8, border: `1px solid ${theme.border}`,
-                      background: theme.bg, fontWeight: 800, fontSize: 13, color: theme.textMid,
-                    }}
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => wrapSelection(articleTextareaRef, content, setContent, '==')}
-                    style={{
-                      padding: '5px 11px', borderRadius: 8, border: `1px solid ${theme.border}`,
-                      background: '#fef9c3', fontWeight: 700, fontSize: 12, color: '#a16207',
-                    }}
-                  >
-                    Highlight
-                  </button>
-                  <span style={{ fontSize: 11, color: theme.textLight, alignSelf: 'center' }}>
-                    Select text, then tap to style
-                  </span>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => wrapBold(articleTextareaRef, content, setContent)}
+                      style={{
+                        padding: '5px 12px', borderRadius: 8, border: `1px solid ${theme.border}`,
+                        background: theme.bg, fontWeight: 800, fontSize: 13, color: theme.textMid,
+                      }}
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => wrapItalic(articleTextareaRef, content, setContent)}
+                      style={{
+                        padding: '5px 13px', borderRadius: 8, border: `1px solid ${theme.border}`,
+                        background: theme.bg, fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: theme.textMid,
+                      }}
+                    >
+                      I
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => wrapHighlight(articleTextareaRef, content, setContent, highlightColor)}
+                      style={{
+                        padding: '5px 12px', borderRadius: 8, border: `1px solid ${theme.border}`,
+                        background: highlightColor, fontWeight: 700, fontSize: 12, color: '#1f2937',
+                      }}
+                    >
+                      Highlight
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: theme.textLight, marginRight: 2 }}>Color:</span>
+                    {['#fde68a', '#a7f3d0', '#bfdbfe', '#fbcfe8', '#fecaca', '#ddd6fe'].map((c) => (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => setHighlightColor(c)}
+                        style={{
+                          width: 20, height: 20, borderRadius: '50%', background: c,
+                          border: highlightColor === c ? '2px solid #333' : '1px solid #ccc',
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
               <textarea
