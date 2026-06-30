@@ -156,9 +156,11 @@ function Search() {
                   border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14,
                   background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                 }}>
-                  <h3 style={{ margin: '0 0 4px 0', fontSize: 15, fontWeight: 800, color: theme.navy }}>
-                    {p.emoji ? `${p.emoji} ` : ''}{p.name}
-                  </h3>
+                  <Link to={`/drug/${encodeURIComponent(p.name)}`} style={{ textDecoration: 'none' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontSize: 15, fontWeight: 800, color: theme.navy }}>
+                      {p.emoji ? `${p.emoji} ` : ''}{p.name}
+                    </h3>
+                  </Link>
                   {p.generic_name && (
                     <p style={{ margin: '0 0 4px 0', color: theme.textLight, fontSize: 12.5 }}>Generic: {p.generic_name}</p>
                   )}
