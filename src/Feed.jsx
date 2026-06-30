@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import BottomNav from './BottomNav.jsx'
+import { theme } from './lib/theme'
 
 function Feed() {
   const { user } = useAuth()
@@ -231,41 +232,55 @@ function Feed() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20, paddingBottom: 90 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-        <Link to={user ? '/profile' : '/login'} style={{ flexShrink: 0 }}>
-          <div
-            style={{
-              width: 38, height: 38, borderRadius: '50%',
-              background: '#0f766e', backgroundSize: 'cover', backgroundPosition: 'center',
+      <div style={{
+        background: theme.heroGradient, margin: '-20px -20px 0 -20px', padding: '22px 20px 26px 20px',
+        borderRadius: '0 0 28px 28px', color: '#fff',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.02em' }}>
+            CareFind<span style={{ color: theme.tealBright }}>.</span>
+          </span>
+          <Link to={user ? '/profile' : '/login'}>
+            <div style={{
+              width: 34, height: 34, borderRadius: '50%', background: theme.tealBright,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 15, fontWeight: 700,
-            }}
-          >
-            {user ? (user.email ? user.email[0].toUpperCase() : '?') : '?'}
-          </div>
-        </Link>
-        <Link
-          to="/search"
-          style={{
-            flex: 1, padding: '10px 14px', borderRadius: 20, background: '#f2f2f2',
-            color: '#888', fontSize: 14, textDecoration: 'none',
-          }}
-        >
-          🔍 Search CareFind
+              color: theme.navy, fontWeight: 800, fontSize: 13, border: '2px solid rgba(255,255,255,0.3)',
+            }}>
+              {user ? (user.email ? user.email[0].toUpperCase() : '?') : '?'}
+            </div>
+          </Link>
+        </div>
+        <h1 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
+          Your CareFind feed
+        </h1>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: '0 0 16px 0', fontWeight: 500 }}>
+          Health tips, questions & community near you
+        </p>
+        <Link to="/search" style={{
+          display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.12)',
+          border: '1px solid rgba(255,255,255,0.18)', borderRadius: 16, padding: '12px 16px',
+          color: 'rgba(255,255,255,0.6)', fontSize: 13, textDecoration: 'none',
+        }}>
+          🔍 Search medication, pharmacy, clinic...
         </Link>
       </div>
 
       {user ? (
-        <form onSubmit={handlePost} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        <form onSubmit={handlePost} style={{
+          marginTop: 18, marginBottom: 16, background: theme.cardBg, border: `1px solid ${theme.border}`,
+          borderRadius: 18, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+        }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
             {Object.keys(postTypeLabels).map((t) => (
               <button
                 type="button"
                 key={t}
                 onClick={() => setPostType(t)}
                 style={{
-                  padding: '6px 12px', borderRadius: 16, border: '1px solid #0f766e', fontSize: 12, fontWeight: 600,
-                  background: postType === t ? '#0f766e' : '#fff', color: postType === t ? '#fff' : '#0f766e',
+                  padding: '7px 13px', borderRadius: 14, border: postType === t ? 'none' : `1px solid ${theme.border}`,
+                  fontSize: 11.5, fontWeight: 700,
+                  background: postType === t ? theme.tealGradient : theme.bg,
+                  color: postType === t ? '#fff' : theme.textMid,
                 }}
               >
                 {postTypeLabels[t]}
@@ -357,7 +372,10 @@ function Feed() {
           <button
             type="submit"
             disabled={posting || !content.trim() || uploadingImage}
-            style={{ marginTop: 10, padding: '8px 16px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600 }}
+            style={{
+              marginTop: 12, padding: '10px 20px', background: theme.tealGradient, color: '#fff', border: 'none',
+              borderRadius: 12, fontWeight: 800, fontSize: 13, boxShadow: '0 3px 8px rgba(15,118,110,0.25)',
+            }}
           >
             {posting ? (uploadingImage ? 'Uploading photo...' : 'Posting...') : 'Post'}
           </button>
@@ -369,84 +387,102 @@ function Feed() {
       )}
 
       {loading && <p>Loading feed...</p>}
-      {!loading && posts.length === 0 && <p style={{ color: '#666' }}>No posts yet. Be the first to share something!</p>}
+      {!loading && posts.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16, background: '#ecfdf5', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px auto',
+          }}>
+            🌱
+          </div>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: theme.navy, margin: '0 0 4px 0' }}>No posts yet</h3>
+          <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>Be the first to share something with the community</p>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {posts.map((post) => (
-          <div key={post.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: post.post_type === 'visual' ? 0 : 14, overflow: 'hidden' }}>
+          <div key={post.id} style={{
+            border: `1px solid ${theme.border}`, borderRadius: 18, padding: post.post_type === 'visual' ? 0 : 16,
+            overflow: 'hidden', background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: post.post_type === 'visual' ? '12px 14px 0 14px' : 0, marginBottom: post.post_type === 'visual' ? 0 : 8 }}>
               <Link to={`/u/${post.user_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
                 <div
                   style={{
-                    width: 32, height: 32, borderRadius: '50%',
-                    background: profiles[post.user_id]?.avatar_url ? `url(${profiles[post.user_id].avatar_url})` : '#0f766e',
+                    width: 38, height: 38, borderRadius: '50%',
+                    background: profiles[post.user_id]?.avatar_url ? `url(${profiles[post.user_id].avatar_url})` : theme.tealGradient,
                     backgroundSize: 'cover', backgroundPosition: 'center',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0,
+                    color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0,
                   }}
                 >
                   {!profiles[post.user_id]?.avatar_url && (profiles[post.user_id]?.display_name?.[0]?.toUpperCase() || '?')}
                 </div>
                 <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#333', display: 'block' }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy, display: 'block' }}>
                     {profiles[post.user_id]?.display_name || 'CareFind User'}
                   </span>
-                  {post.post_type !== 'text' && post.post_type !== 'visual' && (
-                    <span style={{ fontSize: 11, color: '#0f766e', fontWeight: 600 }}>
-                      {post.post_type === 'question' ? '❓ Question' : post.post_type === 'review' ? '⭐ Review' : '📄 Article'}
-                    </span>
-                  )}
+                  <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600 }}>{timeAgo(post.created_at)}</span>
                 </div>
               </Link>
-              {user && post.user_id !== user.id && (
-                <button
-                  onClick={() => toggleFollow(post.user_id)}
-                  style={{
-                    background: isFollowing(post.user_id) ? '#0f766e' : 'transparent',
-                    border: '1px solid #0f766e', borderRadius: 14, padding: '2px 10px',
-                    fontSize: 12, color: isFollowing(post.user_id) ? '#fff' : '#0f766e',
-                  }}
-                >
-                  {isFollowing(post.user_id) ? 'Following' : 'Follow'}
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {post.post_type !== 'text' && post.post_type !== 'visual' && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20,
+                    textTransform: 'uppercase', letterSpacing: '0.03em',
+                    background: post.post_type === 'question' ? '#fef3c7' : post.post_type === 'review' ? '#fef9c3' : '#e0f2fe',
+                    color: post.post_type === 'question' ? theme.warning : post.post_type === 'review' ? '#a16207' : '#0369a1',
+                  }}>
+                    {post.post_type}
+                  </span>
+                )}
+                {user && post.user_id !== user.id && (
+                  <button
+                    onClick={() => toggleFollow(post.user_id)}
+                    style={{
+                      background: isFollowing(post.user_id) ? theme.tealDeep : 'transparent',
+                      border: `1px solid ${theme.tealDeep}`, borderRadius: 14, padding: '3px 11px',
+                      fontSize: 11, fontWeight: 700, color: isFollowing(post.user_id) ? '#fff' : theme.tealDeep,
+                    }}
+                  >
+                    {isFollowing(post.user_id) ? 'Following' : 'Follow'}
+                  </button>
+                )}
+              </div>
             </div>
 
             {post.post_type === 'visual' ? (
-              <div style={{ background: themes[post.theme] || themes.teal, padding: 28, minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p style={{ color: '#fff', fontSize: 20, fontWeight: 700, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>
+              <div style={{ background: themes[post.theme] || themes.teal, padding: 30, minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ color: '#fff', fontSize: 20, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
                   {post.content}
                 </p>
               </div>
             ) : (
               <>
                 {post.post_type === 'review' && post.rating && (
-                  <p style={{ margin: '0 0 6px 0', color: '#f5b301' }}>
+                  <p style={{ margin: '8px 0 6px 0', color: theme.warning, fontSize: 14 }}>
                     {'★'.repeat(post.rating)}{'☆'.repeat(5 - post.rating)}
                   </p>
                 )}
-                <p style={{ margin: '0 0 8px 0', whiteSpace: 'pre-wrap' }}>{post.content}</p>
+                <p style={{ margin: '8px 0 10px 0', whiteSpace: 'pre-wrap', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{post.content}</p>
                 {post.image_url && (
-                  <img src={post.image_url} alt="post" style={{ width: '100%', borderRadius: 8, marginBottom: 8 }} />
+                  <img src={post.image_url} alt="post" style={{ width: '100%', borderRadius: 12, marginBottom: 8 }} />
                 )}
               </>
             )}
-            <div style={{ padding: post.post_type === 'visual' ? '10px 14px 0 14px' : 0 }}>
-              <p style={{ margin: '0 0 10px 0', color: '#999', fontSize: 12 }}>{timeAgo(post.created_at)}</p>
-            </div>
-
             {likeCount(post.id) > 0 && (
               <p style={{
-                margin: 0, padding: post.post_type === 'visual' ? '6px 14px 0 14px' : '4px 0 0 0',
-                fontSize: 12, color: '#666',
+                margin: 0, padding: post.post_type === 'visual' ? '8px 16px 0 16px' : '2px 0 0 0',
+                fontSize: 11.5, color: theme.textLight, fontWeight: 600,
               }}>
                 ❤️ {likeCount(post.id)} {likeCount(post.id) === 1 ? 'like' : 'likes'}
               </p>
             )}
             <div style={{
-              display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 8,
-              marginLeft: post.post_type === 'visual' ? 14 : 0, marginRight: post.post_type === 'visual' ? 14 : 0,
-              marginBottom: post.post_type === 'visual' ? 14 : 0,
+              display: 'flex', borderTop: `1px solid ${theme.border}`, marginTop: 8,
+              marginLeft: post.post_type === 'visual' ? 16 : 0, marginRight: post.post_type === 'visual' ? 16 : 0,
+              marginBottom: post.post_type === 'visual' ? 16 : 0,
             }}>
               <button
                 onClick={() => toggleLike(post.id)}
