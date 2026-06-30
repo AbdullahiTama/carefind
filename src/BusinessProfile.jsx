@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
+import { theme } from './lib/theme'
 
 function BusinessProfile() {
   const { id } = useParams()
@@ -69,111 +70,133 @@ function BusinessProfile() {
     setSubmitting(false)
   }
 
-  if (loading) return <div style={{ padding: 20, fontFamily: 'sans-serif' }}>Loading...</div>
-  if (!biz) return <div style={{ padding: 20, fontFamily: 'sans-serif' }}>Business not found.</div>
+  if (loading) return <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif' }}>Loading...</div>
+  if (!biz) return <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif' }}>Business not found.</div>
 
   const avgRating = reviews.length
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
     : null
 
+  const typeIcons = { pharmacy: '💊', hospital: '🏥', dental: '🦷', optical: '👁️', wellness: '🌿', skincare: '✨' }
+
   return (
-    <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
-      <Link to="/" style={{ color: '#0f766e', textDecoration: 'none', fontSize: 14 }}>← Back to search</Link>
+    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
+      <div style={{ background: theme.heroGradient, padding: '20px 20px 26px 20px', borderRadius: '0 0 28px 28px', color: '#fff' }}>
+        <Link to="/search" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Back to search</Link>
 
-      <h1 style={{ fontSize: 22, margin: '12px 0 4px 0' }}>{biz.name}</h1>
-      <p style={{ color: '#666', margin: '0 0 4px 0' }}>{biz.business_type} · {biz.city}, {biz.state}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+          <span style={{
+            width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0,
+          }}>
+            {typeIcons[biz.business_type] || '🏪'}
+          </span>
+          <div>
+            <h1 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '-0.01em' }}>{biz.name}</h1>
+            <p style={{ margin: 0, fontSize: 12.5, color: 'rgba(255,255,255,0.65)', textTransform: 'capitalize' }}>
+              {biz.business_type} · {biz.city}, {biz.state}
+            </p>
+          </div>
+        </div>
 
-      {avgRating && (
-        <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>
-          ⭐ {avgRating} ({reviews.length} review{reviews.length !== 1 ? 's' : ''})
-        </p>
-      )}
-
-      <p style={{ margin: '0 0 4px 0' }}>{biz.address}</p>
-      {biz.hours && <p style={{ margin: '0 0 4px 0', color: '#666', fontSize: 14 }}>Hours: {biz.hours}</p>}
-
-      <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
-        {biz.whatsapp && (
-          <a
-            href={`https://wa.me/${biz.whatsapp}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ padding: '10px 16px', background: '#25D366', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}
-          >
-            WhatsApp
-          </a>
-        )}
-        {biz.maps_link && (
-          <a
-            href={biz.maps_link}
-            target="_blank"
-            rel="noreferrer"
-            style={{ padding: '10px 16px', background: '#0f766e', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}
-          >
-            Directions
-          </a>
+        {avgRating && (
+          <p style={{ margin: '12px 0 0 0', fontWeight: 700, fontSize: 13, color: theme.tealBright }}>
+            ⭐ {avgRating} · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+          </p>
         )}
       </div>
 
-      <h2 style={{ fontSize: 18, marginTop: 24, marginBottom: 12 }}>Available Products</h2>
-      {products.length === 0 && <p style={{ color: '#666' }}>No products listed yet.</p>}
+      <div style={{ padding: '20px 20px 0 20px' }}>
+        <p style={{ margin: '0 0 4px 0', fontSize: 13.5, color: theme.textMid }}>{biz.address}</p>
+        {biz.hours && <p style={{ margin: '0 0 14px 0', color: theme.textLight, fontSize: 12.5 }}>Hours: {biz.hours}</p>}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-        {products.map((p) => (
-          <div key={p.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
-            <p style={{ margin: '0 0 2px 0', fontWeight: 600 }}>{p.emoji ? `${p.emoji} ` : ''}{p.name}</p>
-            {p.generic_name && <p style={{ margin: '0 0 2px 0', color: '#666', fontSize: 13 }}>{p.generic_name}</p>}
-            <p style={{ margin: 0, fontSize: 14 }}>₦{p.price} · In stock: {p.stock}</p>
-          </div>
-        ))}
-      </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+          {biz.whatsapp && (
+            <a
+              href={`https://wa.me/${biz.whatsapp}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ flex: 1, textAlign: 'center', padding: '11px 16px', background: '#25D366', color: '#fff', borderRadius: 14, textDecoration: 'none', fontSize: 13.5, fontWeight: 700 }}
+            >
+              WhatsApp
+            </a>
+          )}
+          {biz.maps_link && (
+            <a
+              href={biz.maps_link}
+              target="_blank"
+              rel="noreferrer"
+              style={{ flex: 1, textAlign: 'center', padding: '11px 16px', background: theme.tealGradient, color: '#fff', borderRadius: 14, textDecoration: 'none', fontSize: 13.5, fontWeight: 700 }}
+            >
+              Directions
+            </a>
+          )}
+        </div>
 
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Reviews</h2>
-
-      {user ? (
-        <form onSubmit={handleSubmitReview} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
-          <div style={{ marginBottom: 8 }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                type="button"
-                key={n}
-                onClick={() => setRating(n)}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: n <= rating ? '#f5b301' : '#ccc' }}
-              >
-                ★
-              </button>
-            ))}
-          </div>
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Share your experience..."
-            rows={3}
-            style={{ width: '100%', padding: 8, fontSize: 14, border: '1px solid #ccc', borderRadius: 8, fontFamily: 'inherit' }}
-          />
-          <button
-            type="submit"
-            disabled={submitting}
-            style={{ marginTop: 8, padding: '8px 16px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600 }}
-          >
-            {submitting ? 'Posting...' : 'Post Review'}
-          </button>
-        </form>
-      ) : (
-        <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
-          <Link to="/login" style={{ color: '#0f766e', fontWeight: 600 }}>Log in</Link> to leave a review.
+        <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+          Available Products
         </p>
-      )}
+        {products.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No products listed yet.</p>}
 
-      {reviews.length === 0 && <p style={{ color: '#666' }}>No reviews yet. Be the first!</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 26 }}>
+          {products.map((p) => (
+            <div key={p.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 13, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 14, color: theme.navy }}>{p.emoji ? `${p.emoji} ` : ''}{p.name}</p>
+              {p.generic_name && <p style={{ margin: '0 0 2px 0', color: theme.textLight, fontSize: 12 }}>{p.generic_name}</p>}
+              <p style={{ margin: 0, fontSize: 13, color: theme.textMid, fontWeight: 600 }}>₦{p.price} · In stock: {p.stock}</p>
+            </div>
+          ))}
+        </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {reviews.map((r) => (
-          <div key={r.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
-            <p style={{ margin: '0 0 4px 0' }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
-            {r.comment && <p style={{ margin: 0, fontSize: 14 }}>{r.comment}</p>}
-          </div>
-        ))}
+        <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+          Reviews
+        </p>
+
+        {user ? (
+          <form onSubmit={handleSubmitReview} style={{ marginBottom: 18, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ marginBottom: 8 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  type="button"
+                  key={n}
+                  onClick={() => setRating(n)}
+                  style={{ background: 'none', border: 'none', fontSize: 22, color: n <= rating ? theme.warning : '#ddd' }}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Share your experience..."
+              rows={3}
+              style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: 'inherit' }}
+            />
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{ marginTop: 10, padding: '9px 18px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13 }}
+            >
+              {submitting ? 'Posting...' : 'Post Review'}
+            </button>
+          </form>
+        ) : (
+          <p style={{ color: theme.textLight, fontSize: 13, marginBottom: 18 }}>
+            <Link to="/login" style={{ color: theme.tealDeep, fontWeight: 700 }}>Log in</Link> to leave a review.
+          </p>
+        )}
+
+        {reviews.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No reviews yet. Be the first!</p>}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {reviews.map((r) => (
+            <div key={r.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 13, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <p style={{ margin: '0 0 4px 0', color: theme.warning, fontSize: 13 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+              {r.comment && <p style={{ margin: 0, fontSize: 13.5, color: theme.textMid }}>{r.comment}</p>}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
