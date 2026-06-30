@@ -78,12 +78,9 @@ function App() {
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
         {user ? (
-          <button
-            onClick={() => signOut()}
-            style={{ background: 'none', border: 'none', color: '#0f766e', fontSize: 14, fontWeight: 600 }}
-          >
-            Log Out
-          </button>
+          <Link to="/profile" style={{ color: '#0f766e', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
+            My Profile
+          </Link>
         ) : (
           <Link to="/login" style={{ color: '#0f766e', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
             Log In / Sign Up
