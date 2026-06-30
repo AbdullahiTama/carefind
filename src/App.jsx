@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from './lib/supabaseClient'
 
 function App() {
+  const [mode, setMode] = useState('business') // 'business' or 'medication'
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -14,17 +15,34 @@ function App() {
     setLoading(true)
     setSearched(true)
 
-    const { data, error } = await supabase
-      .from('businesses')
-      .select('id, name, address, city, state, business_type, whatsapp')
-      .eq('visible_on_carefind', true)
-      .ilike('name', `%${query}%`)
+    if (mode === 'business') {
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('id, name, address, city, state, business_type, whatsapp')
+        .eq('visible_on_carefind', true)
+        .ilike('name', `%${query}%`)
 
-    if (error) {
-      console.error('Search error:', error)
-      setResults([])
+      if (error) {
+        console.error('Search error:', error)
+        setResults([])
+      } else {
+        setResults(data || [])
+      }
     } else {
-      setResults(data || [])
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, generic_name, price, stock, emoji, business_id, businesses(name, address, city, state, whatsapp, visible_on_carefind)')
+        .eq('list_on_carefind', true)
+        .gt('stock', 0)
+        .or(`name.ilike.%${query}%,generic_name.ilike.%${query}%`)
+
+      if (error) {
+        console.error('Search error:', error)
+        setResults([])
+      } else {
+        const filtered = (data || []).filter((p) => p.businesses && p.businesses.visible_on_carefind)
+        setResults(filtered)
+      }
     }
 
     setLoading(false)
@@ -33,14 +51,37 @@ function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>CareFind</h1>
-      <p style={{ color: '#666', marginBottom: 20 }}>Find pharmacies, hospitals & clinics near you</p>
+      <p style={{ color: '#666', marginBottom: 16 }}>Find pharmacies, hospitals & clinics near you</p>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button
+          onClick={() => { setMode('business'); setResults([]); setSearched(false); setQuery('') }}
+          style={{
+            flex: 1, padding: 10, borderRadius: 8, border: '1px solid #0f766e',
+            background: mode === 'business' ? '#0f766e' : '#fff',
+            color: mode === 'business' ? '#fff' : '#0f766e', fontWeight: 600,
+          }}
+        >
+          Businesses
+        </button>
+        <button
+          onClick={() => { setMode('medication'); setResults([]); setSearched(false); setQuery('') }}
+          style={{
+            flex: 1, padding: 10, borderRadius: 8, border: '1px solid #0f766e',
+            background: mode === 'medication' ? '#0f766e' : '#fff',
+            color: mode === 'medication' ? '#fff' : '#0f766e', fontWeight: 600,
+          }}
+        >
+          Medication
+        </button>
+      </div>
 
       <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search business name..."
+          placeholder={mode === 'business' ? 'Search business name...' : 'Search medication name...'}
           style={{ flex: 1, padding: 10, fontSize: 16, border: '1px solid #ccc', borderRadius: 8 }}
         />
         <button
@@ -54,11 +95,11 @@ function App() {
       {loading && <p>Searching...</p>}
 
       {!loading && searched && results.length === 0 && (
-        <p style={{ color: '#666' }}>No businesses found for "{query}".</p>
+        <p style={{ color: '#666' }}>No results found for "{query}".</p>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {results.map((biz) => (
+        {mode === 'business' && results.map((biz) => (
           <div key={biz.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
             <h3 style={{ margin: '0 0 4px 0' }}>{biz.name}</h3>
             <p style={{ margin: '0 0 4px 0', color: '#666', fontSize: 14 }}>
@@ -71,17 +112,45 @@ function App() {
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  display: 'inline-block',
-                  padding: '8px 14px',
-                  background: '#25D366',
-                  color: '#fff',
-                  borderRadius: 8,
-                  textDecoration: 'none',
-                  fontSize: 14,
+                  display: 'inline-block', padding: '8px 14px', background: '#25D366',
+                  color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14,
                 }}
               >
                 WhatsApp
               </a>
+            )}
+          </div>
+        ))}
+
+        {mode === 'medication' && results.map((p) => (
+          <div key={p.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
+            <h3 style={{ margin: '0 0 4px 0' }}>{p.emoji ? `${p.emoji} ` : ''}{p.name}</h3>
+            {p.generic_name && (
+              <p style={{ margin: '0 0 4px 0', color: '#666', fontSize: 13 }}>Generic: {p.generic_name}</p>
+            )}
+            <p style={{ margin: '0 0 4px 0', fontSize: 14 }}>
+              ₦{p.price} · In stock: {p.stock}
+            </p>
+            {p.businesses && (
+              <>
+                <p style={{ margin: '0 0 4px 0', fontWeight: 600 }}>{p.businesses.name}</p>
+                <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: 13 }}>
+                  {p.businesses.city}, {p.businesses.state}
+                </p>
+                {p.businesses.whatsapp && (
+                  <a
+                    href={`https://wa.me/${p.businesses.whatsapp}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-block', padding: '8px 14px', background: '#25D366',
+                      color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14,
+                    }}
+                  >
+                    WhatsApp
+                  </a>
+                )}
+              </>
             )}
           </div>
         ))}
