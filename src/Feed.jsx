@@ -73,7 +73,7 @@ function Feed() {
       const userIds = [...new Set((postData || []).map((p) => p.user_id))]
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url')
+        .select('id, display_name, avatar_url, is_verified')
         .in('id', userIds)
 
       const profileMap = {}
@@ -518,8 +518,16 @@ function Feed() {
                   {!profiles[post.user_id]?.avatar_url && (profiles[post.user_id]?.display_name?.[0]?.toUpperCase() || '?')}
                 </div>
                 <div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy, display: 'block' }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy, display: 'flex', alignItems: 'center', gap: 4 }}>
                     {profiles[post.user_id]?.display_name || 'CareFind User'}
+                    {profiles[post.user_id]?.is_verified && (
+                      <span style={{
+                        width: 14, height: 14, borderRadius: '50%', background: theme.tealDeep, color: '#fff',
+                        fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900,
+                      }}>
+                        ✓
+                      </span>
+                    )}
                   </span>
                   <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600 }}>{timeAgo(post.created_at)}</span>
                 </div>
