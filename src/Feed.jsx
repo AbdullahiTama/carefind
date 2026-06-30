@@ -11,14 +11,24 @@ function Feed() {
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
   const [content, setContent] = useState('')
+  const [postType, setPostType] = useState('text') // 'text' or 'visual'
+  const [theme, setTheme] = useState('teal')
   const [loading, setLoading] = useState(true)
   const [posting, setPosting] = useState(false)
+
+  const themes = {
+    teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
+    sunset: 'linear-gradient(135deg, #f97316, #db2777)',
+    ocean: 'linear-gradient(135deg, #0ea5e9, #1e3a8a)',
+    purple: 'linear-gradient(135deg, #7c3aed, #4c1d95)',
+    forest: 'linear-gradient(135deg, #16a34a, #14532d)',
+  }
 
   async function loadFeed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id')
+      .select('id, content, created_at, user_id, post_type, theme')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -57,6 +67,8 @@ function Feed() {
     const { error } = await supabase.from('posts').insert({
       user_id: user.id,
       content: content.trim(),
+      post_type: postType,
+      theme: postType === 'visual' ? theme : null,
     })
 
     if (!error) {
@@ -142,13 +154,68 @@ function Feed() {
 
       {user ? (
         <form onSubmit={handlePost} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Share a health tip, ask a question..."
-            rows={3}
-            style={{ width: '100%', padding: 8, fontSize: 15, border: '1px solid #ccc', borderRadius: 8, fontFamily: 'inherit' }}
-          />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button
+              type="button"
+              onClick={() => setPostType('text')}
+              style={{
+                flex: 1, padding: 8, borderRadius: 8, border: '1px solid #0f766e', fontSize: 13, fontWeight: 600,
+                background: postType === 'text' ? '#0f766e' : '#fff', color: postType === 'text' ? '#fff' : '#0f766e',
+              }}
+            >
+              Text Post
+            </button>
+            <button
+              type="button"
+              onClick={() => setPostType('visual')}
+              style={{
+                flex: 1, padding: 8, borderRadius: 8, border: '1px solid #0f766e', fontSize: 13, fontWeight: 600,
+                background: postType === 'visual' ? '#0f766e' : '#fff', color: postType === 'visual' ? '#fff' : '#0f766e',
+              }}
+            >
+              Visual Post
+            </button>
+          </div>
+
+          {postType === 'visual' && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {Object.keys(themes).map((t) => (
+                <button
+                  type="button"
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  style={{
+                    width: 28, height: 28, borderRadius: '50%', background: themes[t],
+                    border: theme === t ? '3px solid #333' : '1px solid #ccc', cursor: 'pointer',
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {postType === 'visual' ? (
+            <div style={{ background: themes[theme], borderRadius: 10, padding: 24, marginBottom: 8, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Type your message..."
+                rows={3}
+                style={{
+                  width: '100%', background: 'transparent', border: 'none', color: '#fff', fontSize: 20, fontWeight: 700,
+                  textAlign: 'center', resize: 'none', fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+            </div>
+          ) : (
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Share a health tip, ask a question..."
+              rows={3}
+              style={{ width: '100%', padding: 8, fontSize: 15, border: '1px solid #ccc', borderRadius: 8, fontFamily: 'inherit' }}
+            />
+          )}
+
           <button
             type="submit"
             disabled={posting || !content.trim()}
@@ -168,11 +235,21 @@ function Feed() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {posts.map((post) => (
-          <div key={post.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
-            <p style={{ margin: '0 0 8px 0', whiteSpace: 'pre-wrap' }}>{post.content}</p>
-            <p style={{ margin: '0 0 10px 0', color: '#999', fontSize: 12 }}>{timeAgo(post.created_at)}</p>
+          <div key={post.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: post.post_type === 'visual' ? 0 : 14, overflow: 'hidden' }}>
+            {post.post_type === 'visual' ? (
+              <div style={{ background: themes[post.theme] || themes.teal, padding: 28, minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ color: '#fff', fontSize: 20, fontWeight: 700, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {post.content}
+                </p>
+              </div>
+            ) : (
+              <p style={{ margin: '0 0 8px 0', whiteSpace: 'pre-wrap' }}>{post.content}</p>
+            )}
+            <div style={{ padding: post.post_type === 'visual' ? '10px 14px 0 14px' : 0 }}>
+              <p style={{ margin: '0 0 10px 0', color: '#999', fontSize: 12 }}>{timeAgo(post.created_at)}</p>
+            </div>
 
-            <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+            <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #f0f0f0', paddingTop: 8, paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
               <button
                 onClick={() => toggleLike(post.id)}
                 disabled={!user}
@@ -192,7 +269,7 @@ function Feed() {
             </div>
 
             {openComments[post.id] && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0f0' }}>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0f0', paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
                 {(comments[post.id] || []).map((c) => (
                   <p key={c.id} style={{ margin: '0 0 6px 0', fontSize: 13, color: '#333' }}>{c.content}</p>
                 ))}
