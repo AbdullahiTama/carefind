@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 
 function App() {
@@ -101,7 +102,9 @@ function App() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {mode === 'business' && results.map((biz) => (
           <div key={biz.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
-            <h3 style={{ margin: '0 0 4px 0' }}>{biz.name}</h3>
+            <Link to={`/business/${biz.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <h3 style={{ margin: '0 0 4px 0' }}>{biz.name}</h3>
+            </Link>
             <p style={{ margin: '0 0 4px 0', color: '#666', fontSize: 14 }}>
               {biz.business_type} · {biz.city}, {biz.state}
             </p>
