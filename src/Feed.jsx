@@ -14,6 +14,8 @@ function Feed() {
   const [profiles, setProfiles] = useState({})
   const [follows, setFollows] = useState([])
   const [savedPosts, setSavedPosts] = useState([])
+  const [reportedPosts, setReportedPosts] = useState([])
+  const [reportingId, setReportingId] = useState(null)
   const [comments, setComments] = useState({})
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
@@ -43,6 +45,13 @@ function Feed() {
     question: 'Question',
     review: 'Review',
     article: 'Article',
+  }
+
+  const blockedPhrases = ['spam', 'buy now', 'click here', 'whatsapp me', 'send money', 'wire transfer']
+
+  function screenContent(text) {
+    const lower = text.toLowerCase()
+    return blockedPhrases.some((phrase) => lower.includes(phrase))
   }
 
   async function loadFeed() {
@@ -145,6 +154,12 @@ function Feed() {
       setUploadingImage(false)
     }
 
+    if (screenContent(content.trim())) {
+      alert('Your post was flagged for review. Please remove any spam-like content and try again.')
+      setPosting(false)
+      return
+    }
+
     const { error } = await supabase.from('posts').insert({
       user_id: user.id,
       content: content.trim(),
@@ -237,6 +252,27 @@ function Feed() {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: authorId })
     }
     loadFeed()
+  }
+
+  async function handleReport(postId) {
+    if (!user) return
+    if (reportedPosts.includes(postId)) return
+    setReportingId(postId)
+
+    const reason = prompt('Why are you reporting this post?\n\n1. Spam\n2. False medical information\n3. Harassment\n4. Inappropriate content\n\nType the reason:')
+    if (!reason) {
+      setReportingId(null)
+      return
+    }
+
+    await supabase.from('reports').insert({
+      reporter_id: user.id,
+      post_id: postId,
+      reason: reason,
+    })
+
+    setReportedPosts((prev) => [...prev, postId])
+    setReportingId(null)
   }
 
   function isSaved(postId) {
@@ -643,6 +679,21 @@ function Feed() {
               >
                 <span style={{ fontSize: 16 }}>{isSaved(post.id) ? '🔖' : '📑'}</span> Save
               </button>
+              {user && post.user_id !== user.id && (
+                <button
+                  onClick={() => handleReport(post.id)}
+                  disabled={reportedPosts.includes(post.id) || reportingId === post.id}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', fontSize: 13,
+                    color: reportedPosts.includes(post.id) ? theme.textLight : '#555', fontWeight: 600,
+                    cursor: 'pointer', padding: '10px 0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>🚩</span>
+                  {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
+                </button>
+              )}
             </div>
 
             {openComments[post.id] && (
