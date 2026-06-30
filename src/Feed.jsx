@@ -231,7 +231,29 @@ function Feed() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20, paddingBottom: 90 }}>
-      <h1 style={{ fontSize: 22, margin: '0 0 16px 0' }}>CareFind</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+        <Link to={user ? '/profile' : '/login'} style={{ flexShrink: 0 }}>
+          <div
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: '#0f766e', backgroundSize: 'cover', backgroundPosition: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 15, fontWeight: 700,
+            }}
+          >
+            {user ? (user.email ? user.email[0].toUpperCase() : '?') : '?'}
+          </div>
+        </Link>
+        <Link
+          to="/search"
+          style={{
+            flex: 1, padding: '10px 14px', borderRadius: 20, background: '#f2f2f2',
+            color: '#888', fontSize: 14, textDecoration: 'none',
+          }}
+        >
+          🔍 Search CareFind
+        </Link>
+      </div>
 
       {user ? (
         <form onSubmit={handlePost} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
@@ -413,27 +435,56 @@ function Feed() {
               <p style={{ margin: '0 0 10px 0', color: '#999', fontSize: 12 }}>{timeAgo(post.created_at)}</p>
             </div>
 
-            <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #f0f0f0', paddingTop: 8, paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
+            {likeCount(post.id) > 0 && (
+              <p style={{
+                margin: 0, padding: post.post_type === 'visual' ? '6px 14px 0 14px' : '4px 0 0 0',
+                fontSize: 12, color: '#666',
+              }}>
+                ❤️ {likeCount(post.id)} {likeCount(post.id) === 1 ? 'like' : 'likes'}
+              </p>
+            )}
+            <div style={{
+              display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 8,
+              marginLeft: post.post_type === 'visual' ? 14 : 0, marginRight: post.post_type === 'visual' ? 14 : 0,
+              marginBottom: post.post_type === 'visual' ? 14 : 0,
+            }}>
               <button
                 onClick={() => toggleLike(post.id)}
                 disabled={!user}
                 style={{
-                  background: 'none', border: 'none', fontSize: 14, cursor: user ? 'pointer' : 'default',
-                  color: userHasLiked(post.id) ? '#0f766e' : '#666', fontWeight: userHasLiked(post.id) ? 700 : 400,
+                  flex: 1, background: 'none', border: 'none', fontSize: 13, cursor: user ? 'pointer' : 'default',
+                  color: userHasLiked(post.id) ? '#0f766e' : '#555', fontWeight: 600,
+                  padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}
               >
-                {userHasLiked(post.id) ? '❤️' : '🤍'} {likeCount(post.id) || ''}
+                <span style={{ fontSize: 16 }}>{userHasLiked(post.id) ? '❤️' : '🤍'}</span> Like
               </button>
               <button
                 onClick={() => toggleComments(post.id)}
-                style={{ background: 'none', border: 'none', fontSize: 14, color: '#666', cursor: 'pointer' }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', fontSize: 13, color: '#555', fontWeight: 600,
+                  cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
               >
-                💬 {comments[post.id] ? comments[post.id].length : 'Comments'}
+                <span style={{ fontSize: 16 }}>💬</span> Comment
+              </button>
+              <button
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: 'CareFind', text: post.content, url: window.location.href })
+                  }
+                }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', fontSize: 13, color: '#555', fontWeight: 600,
+                  cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>↗️</span> Share
               </button>
             </div>
 
             {openComments[post.id] && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0f0', paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
+              <div style={{ paddingTop: 10, borderTop: '1px solid #f0f0f0', paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
                 {(comments[post.id] || []).map((c) => (
                   <p key={c.id} style={{ margin: '0 0 6px 0', fontSize: 13, color: '#333' }}>{c.content}</p>
                 ))}
