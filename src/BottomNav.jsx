@@ -40,6 +40,10 @@ function BottomNav() {
           +
         </div>
       </Link>
+      <Link to="/" style={itemStyle(false)}>
+        <span style={{ fontSize: 19 }}>🔔</span>
+        Alerts
+      </Link>
       <Link to="/profile" style={itemStyle(isActive('/profile'))}>
         <span style={{ fontSize: 19 }}>👤</span>
         Profile
