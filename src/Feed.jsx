@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
+import BottomNav from './BottomNav.jsx'
 
 function Feed() {
   const { user } = useAuth()
@@ -229,12 +230,8 @@ function Feed() {
   }
 
   return (
-    <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Link to="/" style={{ color: '#0f766e', textDecoration: 'none', fontSize: 14 }}>← Search</Link>
-        <h1 style={{ fontSize: 20, margin: 0 }}>CareFind Feed</h1>
-        <div style={{ width: 50 }} />
-      </div>
+    <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20, paddingBottom: 90 }}>
+      <h1 style={{ fontSize: 22, margin: '0 0 16px 0' }}>CareFind</h1>
 
       {user ? (
         <form onSubmit={handlePost} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
@@ -467,6 +464,7 @@ function Feed() {
           </div>
         ))}
       </div>
+      <BottomNav />
     </div>
   )
 }
