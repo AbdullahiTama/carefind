@@ -30,6 +30,10 @@ function Feed() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const articleTextareaRef = useRef(null)
   const [highlightColor, setHighlightColor] = useState('#fde68a')
+  const [reviewTarget, setReviewTarget] = useState(null) // { type: 'business'|'product', id, name }
+  const [reviewSearch, setReviewSearch] = useState('')
+  const [reviewSearchResults, setReviewSearchResults] = useState([])
+  const [reviewSearching, setReviewSearching] = useState(false)
 
   const themes = {
     teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
@@ -52,6 +56,21 @@ function Feed() {
   function screenContent(text) {
     const lower = text.toLowerCase()
     return blockedPhrases.some((phrase) => lower.includes(phrase))
+  }
+
+  async function searchReviewTargets(q) {
+    if (!q.trim()) return
+    setReviewSearching(true)
+    const [bizRes, prodRes] = await Promise.all([
+      supabase.from('businesses').select('id, name, business_type').eq('visible_on_carefind', true).ilike('name', `%${q}%`).limit(4),
+      supabase.from('products').select('id, name, emoji').eq('list_on_carefind', true).ilike('name', `%${q}%`).limit(4),
+    ])
+    const results = [
+      ...(bizRes.data || []).map((b) => ({ type: 'business', id: b.id, name: b.name, sub: b.business_type })),
+      ...(prodRes.data || []).map((p) => ({ type: 'product', id: p.id, name: `${p.emoji || '💊'} ${p.name}`, sub: 'Medication' })),
+    ]
+    setReviewSearchResults(results)
+    setReviewSearching(false)
   }
 
   async function loadFeed() {
@@ -168,6 +187,28 @@ function Feed() {
       rating: postType === 'review' ? postRating : null,
       image_url: imageUrl,
     })
+
+    // If it's a review and a target is tagged, also write to the intelligence layer
+    if (!error && postType === 'review' && reviewTarget) {
+      if (reviewTarget.type === 'business') {
+        await supabase.from('reviews').insert({
+          business_id: reviewTarget.id,
+          user_id: user.id,
+          rating: postRating,
+          comment: content.trim(),
+        })
+      } else if (reviewTarget.type === 'product') {
+        await supabase.from('product_reviews').insert({
+          product_id: reviewTarget.id,
+          user_id: user.id,
+          rating: postRating,
+          comment: content.trim(),
+        })
+      }
+      setReviewTarget(null)
+      setReviewSearch('')
+      setReviewSearchResults([])
+    }
 
     if (!error) {
       setContent('')
@@ -382,6 +423,59 @@ function Feed() {
                   }}
                 />
               ))}
+            </div>
+          )}
+
+          {postType === 'review' && (
+            <div style={{ marginBottom: 10 }}>
+              {reviewTarget ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ecfdf5', borderRadius: 12, padding: '8px 12px' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: theme.tealDeep, flex: 1 }}>
+                    {reviewTarget.type === 'business' ? '🏥' : '💊'} {reviewTarget.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setReviewTarget(null); setReviewSearch(''); setReviewSearchResults([]) }}
+                    style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: 16 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="text"
+                      value={reviewSearch}
+                      onChange={(e) => { setReviewSearch(e.target.value) }}
+                      placeholder="Tag a business or medication..."
+                      style={{ flex: 1, padding: 9, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => searchReviewTargets(reviewSearch)}
+                      style={{ padding: '8px 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700 }}
+                    >
+                      {reviewSearching ? '...' : 'Find'}
+                    </button>
+                  </div>
+                  {reviewSearchResults.length > 0 && (
+                    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, marginTop: 4, overflow: 'hidden' }}>
+                      {reviewSearchResults.map((r) => (
+                        <button
+                          type="button"
+                          key={r.id}
+                          onClick={() => { setReviewTarget(r); setReviewSearchResults([]) }}
+                          style={{ width: '100%', padding: '9px 12px', background: '#fff', border: 'none', borderBottom: `1px solid ${theme.border}`, textAlign: 'left', fontSize: 13 }}
+                        >
+                          <span style={{ fontWeight: 700, color: theme.navy }}>{r.name}</span>
+                          <span style={{ color: theme.textLight, fontSize: 11, marginLeft: 6 }}>{r.sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
