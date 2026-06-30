@@ -8,6 +8,7 @@ import BusinessProfile from './BusinessProfile.jsx'
 import Login from './Login.jsx'
 import Profile from './Profile.jsx'
 import PublicProfile from './PublicProfile.jsx'
+import SavedPosts from './SavedPosts.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -20,6 +21,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/login" element={<Login />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/u/:id" element={<PublicProfile />} />
+          <Route path="/saved" element={<SavedPosts />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
