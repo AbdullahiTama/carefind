@@ -198,8 +198,27 @@ function Profile() {
         </Link>
 
         {[
-          { icon: '🩺', label: 'Become a Verified Professional' },
-          { icon: '🏥', label: 'Register or Claim a Business' },
+          { icon: '🩺', label: 'Become a Verified Professional', to: '/verify' },
+          { icon: '🏥', label: 'Register or Claim a Business', to: '/claim-business' },
+        ].map((item) => (
+          <Link key={item.label} to={item.to} style={{ textDecoration: 'none' }}>
+            <div style={{
+              border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, display: 'flex',
+              alignItems: 'center', gap: 12, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+            }}>
+              <span style={{
+                width: 34, height: 34, borderRadius: 10, background: theme.bg, display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: 16,
+              }}>
+                {item.icon}
+              </span>
+              <span style={{ fontSize: 13.5, color: theme.textMid, fontWeight: 600, flex: 1 }}>{item.label}</span>
+              <span style={{ color: theme.textLight, fontSize: 14 }}>›</span>
+            </div>
+          </Link>
+        ))}
+
+        {[
           { icon: '⭐', label: 'My Reviews' },
         ].map((item) => (
           <div key={item.label} style={{
