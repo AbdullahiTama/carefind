@@ -16,7 +16,7 @@ function Feed() {
   const [commentDrafts, setCommentDrafts] = useState({})
   const [content, setContent] = useState('')
   const [postType, setPostType] = useState('text') // text, visual, question, review, article
-  const [theme, setTheme] = useState('teal')
+  const [visualTheme, setVisualTheme] = useState('teal')
   const [postRating, setPostRating] = useState(5)
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
@@ -132,7 +132,7 @@ function Feed() {
       user_id: user.id,
       content: content.trim(),
       post_type: postType,
-      theme: postType === 'visual' ? theme : null,
+      theme: postType === 'visual' ? visualTheme : null,
       rating: postType === 'review' ? postRating : null,
       image_url: imageUrl,
     })
@@ -294,10 +294,10 @@ function Feed() {
                 <button
                   type="button"
                   key={t}
-                  onClick={() => setTheme(t)}
+                  onClick={() => setVisualTheme(t)}
                   style={{
                     width: 28, height: 28, borderRadius: '50%', background: themes[t],
-                    border: theme === t ? '3px solid #333' : '1px solid #ccc', cursor: 'pointer',
+                    border: visualTheme === t ? '3px solid #333' : '1px solid #ccc', cursor: 'pointer',
                   }}
                 />
               ))}
@@ -320,7 +320,7 @@ function Feed() {
           )}
 
           {postType === 'visual' ? (
-            <div style={{ background: themes[theme], borderRadius: 10, padding: 24, marginBottom: 8, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: themes[visualTheme], borderRadius: 10, padding: 24, marginBottom: 8, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
