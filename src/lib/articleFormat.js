@@ -1,24 +1,30 @@
 // Lightweight formatting helpers for Article posts.
-// Supports **bold** and ==highlight== markup, applied via toolbar buttons,
-// and renders them safely (HTML-escaped first, then markup applied).
+// Supports **bold**, *italic*, and ==color|highlight== markup via toolbar buttons.
 
-export function wrapSelection(textareaRef, text, setText, marker) {
+export function wrapSelection(textareaRef, text, setText, before, after) {
   const el = textareaRef.current
   if (!el) return
   const start = el.selectionStart
   const end = el.selectionEnd
   const selected = text.slice(start, end)
-  const before = text.slice(0, start)
-  const after = text.slice(end)
+  const pre = text.slice(0, start)
+  const post = text.slice(end)
 
-  if (!selected) {
-    const inserted = `${marker}text${marker}`
-    setText(before + inserted + after)
-    return
-  }
+  const inner = selected || 'text'
+  const wrapped = `${before}${inner}${after}`
+  setText(pre + wrapped + post)
+}
 
-  const wrapped = `${marker}${selected}${marker}`
-  setText(before + wrapped + after)
+export function wrapBold(textareaRef, text, setText) {
+  wrapSelection(textareaRef, text, setText, '**', '**')
+}
+
+export function wrapItalic(textareaRef, text, setText) {
+  wrapSelection(textareaRef, text, setText, '*', '*')
+}
+
+export function wrapHighlight(textareaRef, text, setText, colorHex) {
+  wrapSelection(textareaRef, text, setText, `==${colorHex}|`, '==')
 }
 
 function escapeHtml(str) {
@@ -33,8 +39,14 @@ export function renderArticleHtml(content) {
   return paragraphs
     .map((para) => {
       let safe = escapeHtml(para.trim())
-      safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Highlight with explicit color: ==#hexcolor|text==
+      safe = safe.replace(/==(#[0-9a-fA-F]{3,8})\|(.+?)==/g, '<mark style="background:$1;color:#1f2937;padding:1px 4px;border-radius:4px;">$2</mark>')
+      // Highlight without color (default yellow): ==text==
       safe = safe.replace(/==(.+?)==/g, '<mark>$1</mark>')
+      // Bold
+      safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic (single asterisk, after bold is processed so no collision)
+      safe = safe.replace(/\*(.+?)\*/g, '<em>$1</em>')
       safe = safe.replace(/\n/g, '<br/>')
       return `<p>${safe}</p>`
     })
