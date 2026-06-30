@@ -69,6 +69,9 @@ function Feed() {
       ...(bizRes.data || []).map((b) => ({ type: 'business', id: b.id, name: b.name, sub: b.business_type })),
       ...(prodRes.data || []).map((p) => ({ type: 'product', id: p.id, name: `${p.emoji || '💊'} ${p.name}`, sub: 'Medication' })),
     ]
+    if (results.length === 0) {
+      results.push({ type: 'unclaimed', id: null, name: q.trim(), sub: 'Not yet listed — review anyway' })
+    }
     setReviewSearchResults(results)
     setReviewSearching(false)
   }
@@ -203,6 +206,12 @@ function Feed() {
           user_id: user.id,
           rating: postRating,
           comment: content.trim(),
+        })
+      } else if (reviewTarget.type === 'unclaimed') {
+        await supabase.from('unclaimed_entities').insert({
+          name: reviewTarget.name,
+          entity_type: reviewTarget.entityType || 'business',
+          submitted_by: user.id,
         })
       }
       setReviewTarget(null)
@@ -429,9 +438,10 @@ function Feed() {
           {postType === 'review' && (
             <div style={{ marginBottom: 10 }}>
               {reviewTarget ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ecfdf5', borderRadius: 12, padding: '8px 12px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: theme.tealDeep, flex: 1 }}>
-                    {reviewTarget.type === 'business' ? '🏥' : '💊'} {reviewTarget.name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: reviewTarget.type === 'unclaimed' ? '#fef9c3' : '#ecfdf5', borderRadius: 12, padding: '8px 12px' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: reviewTarget.type === 'unclaimed' ? '#a16207' : theme.tealDeep, flex: 1 }}>
+                    {reviewTarget.type === 'business' ? '🏥' : reviewTarget.type === 'product' ? '💊' : reviewTarget.entityType === 'business' ? '🏥' : '💊'} {reviewTarget.name}
+                    {reviewTarget.type === 'unclaimed' && <span style={{ fontSize: 10, fontWeight: 600, marginLeft: 4 }}>(unlisted)</span>}
                   </span>
                   <button
                     type="button"
@@ -461,16 +471,40 @@ function Feed() {
                   </div>
                   {reviewSearchResults.length > 0 && (
                     <div style={{ border: `1px solid ${theme.border}`, borderRadius: 10, marginTop: 4, overflow: 'hidden' }}>
-                      {reviewSearchResults.map((r) => (
-                        <button
-                          type="button"
-                          key={r.id}
-                          onClick={() => { setReviewTarget(r); setReviewSearchResults([]) }}
-                          style={{ width: '100%', padding: '9px 12px', background: '#fff', border: 'none', borderBottom: `1px solid ${theme.border}`, textAlign: 'left', fontSize: 13 }}
-                        >
-                          <span style={{ fontWeight: 700, color: theme.navy }}>{r.name}</span>
-                          <span style={{ color: theme.textLight, fontSize: 11, marginLeft: 6 }}>{r.sub}</span>
-                        </button>
+                    {reviewSearchResults.map((r) => (
+                        r.type === 'unclaimed' ? (
+                          <div key="unclaimed" style={{ padding: '10px 12px', borderBottom: `1px solid ${theme.border}`, background: '#fef9c3' }}>
+                            <p style={{ margin: '0 0 6px 0', fontSize: 12.5, color: '#a16207', fontWeight: 700 }}>
+                              "{r.name}" not found on CareFind — review anyway?
+                            </p>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => { setReviewTarget({ ...r, entityType: 'business' }); setReviewSearchResults([]) }}
+                                style={{ flex: 1, padding: '6px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
+                              >
+                                🏥 It's a business
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setReviewTarget({ ...r, entityType: 'product' }); setReviewSearchResults([]) }}
+                                style={{ flex: 1, padding: '6px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
+                              >
+                                💊 It's a medication
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            key={r.id}
+                            onClick={() => { setReviewTarget(r); setReviewSearchResults([]) }}
+                            style={{ width: '100%', padding: '9px 12px', background: '#fff', border: 'none', borderBottom: `1px solid ${theme.border}`, textAlign: 'left', fontSize: 13 }}
+                          >
+                            <span style={{ fontWeight: 700, color: theme.navy }}>{r.name}</span>
+                            <span style={{ color: theme.textLight, fontSize: 11, marginLeft: 6 }}>{r.sub}</span>
+                          </button>
+                        )
                       ))}
                     </div>
                   )}
