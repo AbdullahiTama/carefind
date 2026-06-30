@@ -76,7 +76,10 @@ function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Link to="/feed" style={{ color: '#0f766e', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
+          Feed
+        </Link>
         {user ? (
           <Link to="/profile" style={{ color: '#0f766e', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
             My Profile
