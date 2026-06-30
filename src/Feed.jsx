@@ -13,6 +13,7 @@ function Feed() {
   const [reactions, setReactions] = useState([])
   const [profiles, setProfiles] = useState({})
   const [follows, setFollows] = useState([])
+  const [savedPosts, setSavedPosts] = useState([])
   const [comments, setComments] = useState({})
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
@@ -84,10 +85,22 @@ function Feed() {
         .select('id, follower_id, following_id')
         .in('following_id', userIds)
       setFollows(followData || [])
+
+      if (user) {
+        const { data: savedData } = await supabase
+          .from('saved_posts')
+          .select('id, post_id')
+          .eq('user_id', user.id)
+          .in('post_id', postIds)
+        setSavedPosts(savedData || [])
+      } else {
+        setSavedPosts([])
+      }
     } else {
       setReactions([])
       setProfiles({})
       setFollows([])
+      setSavedPosts([])
     }
 
     setLoading(false)
@@ -222,6 +235,22 @@ function Feed() {
       await supabase.from('follows').delete().eq('id', existing.id)
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: authorId })
+    }
+    loadFeed()
+  }
+
+  function isSaved(postId) {
+    return savedPosts.some((s) => s.post_id === postId)
+  }
+
+  async function toggleSave(postId) {
+    if (!user) return
+    const existing = savedPosts.find((s) => s.post_id === postId)
+
+    if (existing) {
+      await supabase.from('saved_posts').delete().eq('id', existing.id)
+    } else {
+      await supabase.from('saved_posts').insert({ user_id: user.id, post_id: postId })
     }
     loadFeed()
   }
@@ -593,6 +622,18 @@ function Feed() {
                 }}
               >
                 <span style={{ fontSize: 16 }}>↗️</span> Share
+              </button>
+              <button
+                onClick={() => toggleSave(post.id)}
+                disabled={!user}
+                style={{
+                  flex: 1, background: 'none', border: 'none', fontSize: 13,
+                  color: isSaved(post.id) ? theme.tealDeep : '#555', fontWeight: 600,
+                  cursor: user ? 'pointer' : 'default', padding: '10px 0',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>{isSaved(post.id) ? '🔖' : '📑'}</span> Save
               </button>
             </div>
 
