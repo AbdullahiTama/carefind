@@ -7,16 +7,20 @@ function Feed() {
   const { user } = useAuth()
   const [posts, setPosts] = useState([])
   const [reactions, setReactions] = useState([])
-  const [profiles, setProfiles] = useState({}) // { userId: display_name }
+  const [profiles, setProfiles] = useState({})
   const [follows, setFollows] = useState([])
   const [comments, setComments] = useState({})
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
   const [content, setContent] = useState('')
-  const [postType, setPostType] = useState('text') // 'text' or 'visual'
+  const [postType, setPostType] = useState('text') // text, visual, question, review, article
   const [theme, setTheme] = useState('teal')
+  const [postRating, setPostRating] = useState(5)
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
   const [loading, setLoading] = useState(true)
   const [posting, setPosting] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   const themes = {
     teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
@@ -26,11 +30,19 @@ function Feed() {
     forest: 'linear-gradient(135deg, #16a34a, #14532d)',
   }
 
+  const postTypeLabels = {
+    text: 'Text Post',
+    visual: 'Visual Post',
+    question: 'Question',
+    review: 'Review',
+    article: 'Article',
+  }
+
   async function loadFeed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id, post_type, theme')
+      .select('id, content, created_at, user_id, post_type, theme, image_url, rating')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -54,11 +66,11 @@ function Feed() {
       const userIds = [...new Set((postData || []).map((p) => p.user_id))]
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, display_name')
+        .select('id, display_name, avatar_url')
         .in('id', userIds)
 
       const profileMap = {}
-      ;(profileData || []).forEach((p) => { profileMap[p.id] = p.display_name })
+      ;(profileData || []).forEach((p) => { profileMap[p.id] = p })
       setProfiles(profileMap)
 
       const { data: followData } = await supabase
@@ -79,20 +91,55 @@ function Feed() {
     loadFeed()
   }, [])
 
+  function handleImageSelect(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  function clearImage() {
+    setImageFile(null)
+    setImagePreview(null)
+  }
+
   async function handlePost(e) {
     e.preventDefault()
     if (!content.trim() || !user) return
     setPosting(true)
+
+    let imageUrl = null
+
+    if (imageFile) {
+      setUploadingImage(true)
+      const fileExt = imageFile.name.split('.').pop()
+      const filePath = `${user.id}-${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('post-images')
+        .upload(filePath, imageFile)
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(filePath)
+        imageUrl = urlData.publicUrl
+      }
+      setUploadingImage(false)
+    }
 
     const { error } = await supabase.from('posts').insert({
       user_id: user.id,
       content: content.trim(),
       post_type: postType,
       theme: postType === 'visual' ? theme : null,
+      rating: postType === 'review' ? postRating : null,
+      image_url: imageUrl,
     })
 
     if (!error) {
       setContent('')
+      setImageFile(null)
+      setImagePreview(null)
+      setPostRating(5)
       loadFeed()
     } else {
       console.error('Post error:', error)
@@ -191,27 +238,20 @@ function Feed() {
 
       {user ? (
         <form onSubmit={handlePost} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <button
-              type="button"
-              onClick={() => setPostType('text')}
-              style={{
-                flex: 1, padding: 8, borderRadius: 8, border: '1px solid #0f766e', fontSize: 13, fontWeight: 600,
-                background: postType === 'text' ? '#0f766e' : '#fff', color: postType === 'text' ? '#fff' : '#0f766e',
-              }}
-            >
-              Text Post
-            </button>
-            <button
-              type="button"
-              onClick={() => setPostType('visual')}
-              style={{
-                flex: 1, padding: 8, borderRadius: 8, border: '1px solid #0f766e', fontSize: 13, fontWeight: 600,
-                background: postType === 'visual' ? '#0f766e' : '#fff', color: postType === 'visual' ? '#fff' : '#0f766e',
-              }}
-            >
-              Visual Post
-            </button>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {Object.keys(postTypeLabels).map((t) => (
+              <button
+                type="button"
+                key={t}
+                onClick={() => setPostType(t)}
+                style={{
+                  padding: '6px 12px', borderRadius: 16, border: '1px solid #0f766e', fontSize: 12, fontWeight: 600,
+                  background: postType === t ? '#0f766e' : '#fff', color: postType === t ? '#fff' : '#0f766e',
+                }}
+              >
+                {postTypeLabels[t]}
+              </button>
+            ))}
           </div>
 
           {postType === 'visual' && (
@@ -226,6 +266,21 @@ function Feed() {
                     border: theme === t ? '3px solid #333' : '1px solid #ccc', cursor: 'pointer',
                   }}
                 />
+              ))}
+            </div>
+          )}
+
+          {postType === 'review' && (
+            <div style={{ marginBottom: 10 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  type="button"
+                  key={n}
+                  onClick={() => setPostRating(n)}
+                  style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: n <= postRating ? '#f5b301' : '#ccc' }}
+                >
+                  ★
+                </button>
               ))}
             </div>
           )}
@@ -247,18 +302,45 @@ function Feed() {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Share a health tip, ask a question..."
-              rows={3}
+              placeholder={
+                postType === 'question' ? 'Ask your question...' :
+                postType === 'review' ? 'Share your experience with this product or service...' :
+                postType === 'article' ? 'Write your article...' :
+                'Share a health tip, ask a question...'
+              }
+              rows={postType === 'article' ? 8 : 3}
               style={{ width: '100%', padding: 8, fontSize: 15, border: '1px solid #ccc', borderRadius: 8, fontFamily: 'inherit' }}
             />
           )}
 
+          {postType !== 'visual' && (
+            <div style={{ marginTop: 8 }}>
+              {imagePreview ? (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img src={imagePreview} alt="preview" style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 8 }} />
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    style={{ position: 'absolute', top: 4, right: 4, background: '#000', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, fontSize: 12 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <label style={{ fontSize: 13, color: '#0f766e', fontWeight: 600, cursor: 'pointer' }}>
+                  📷 Add a photo
+                  <input type="file" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
+                </label>
+              )}
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={posting || !content.trim()}
-            style={{ marginTop: 8, padding: '8px 16px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600 }}
+            disabled={posting || !content.trim() || uploadingImage}
+            style={{ marginTop: 10, padding: '8px 16px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600 }}
           >
-            {posting ? 'Posting...' : 'Post'}
+            {posting ? (uploadingImage ? 'Uploading photo...' : 'Posting...') : 'Post'}
           </button>
         </form>
       ) : (
@@ -273,10 +355,30 @@ function Feed() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {posts.map((post) => (
           <div key={post.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: post.post_type === 'visual' ? 0 : 14, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: post.post_type === 'visual' ? '12px 14px 0 14px' : 0, marginBottom: post.post_type === 'visual' ? 0 : 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
-                {profiles[post.user_id] || 'CareFind User'}
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: post.post_type === 'visual' ? '12px 14px 0 14px' : 0, marginBottom: post.post_type === 'visual' ? 0 : 8 }}>
+              <Link to={`/u/${post.user_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+                <div
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: profiles[post.user_id]?.avatar_url ? `url(${profiles[post.user_id].avatar_url})` : '#0f766e',
+                    backgroundSize: 'cover', backgroundPosition: 'center',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0,
+                  }}
+                >
+                  {!profiles[post.user_id]?.avatar_url && (profiles[post.user_id]?.display_name?.[0]?.toUpperCase() || '?')}
+                </div>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#333', display: 'block' }}>
+                    {profiles[post.user_id]?.display_name || 'CareFind User'}
+                  </span>
+                  {post.post_type !== 'text' && post.post_type !== 'visual' && (
+                    <span style={{ fontSize: 11, color: '#0f766e', fontWeight: 600 }}>
+                      {post.post_type === 'question' ? '❓ Question' : post.post_type === 'review' ? '⭐ Review' : '📄 Article'}
+                    </span>
+                  )}
+                </div>
+              </Link>
               {user && post.user_id !== user.id && (
                 <button
                   onClick={() => toggleFollow(post.user_id)}
@@ -290,6 +392,7 @@ function Feed() {
                 </button>
               )}
             </div>
+
             {post.post_type === 'visual' ? (
               <div style={{ background: themes[post.theme] || themes.teal, padding: 28, minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <p style={{ color: '#fff', fontSize: 20, fontWeight: 700, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -297,7 +400,17 @@ function Feed() {
                 </p>
               </div>
             ) : (
-              <p style={{ margin: '0 0 8px 0', whiteSpace: 'pre-wrap' }}>{post.content}</p>
+              <>
+                {post.post_type === 'review' && post.rating && (
+                  <p style={{ margin: '0 0 6px 0', color: '#f5b301' }}>
+                    {'★'.repeat(post.rating)}{'☆'.repeat(5 - post.rating)}
+                  </p>
+                )}
+                <p style={{ margin: '0 0 8px 0', whiteSpace: 'pre-wrap' }}>{post.content}</p>
+                {post.image_url && (
+                  <img src={post.image_url} alt="post" style={{ width: '100%', borderRadius: 8, marginBottom: 8 }} />
+                )}
+              </>
             )}
             <div style={{ padding: post.post_type === 'visual' ? '10px 14px 0 14px' : 0 }}>
               <p style={{ margin: '0 0 10px 0', color: '#999', fontSize: 12 }}>{timeAgo(post.created_at)}</p>
