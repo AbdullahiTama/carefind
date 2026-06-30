@@ -1,46 +1,94 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
+import { useAuth } from './lib/AuthContext'
 
 function BusinessProfile() {
   const { id } = useParams()
+  const { user } = useAuth()
   const [biz, setBiz] = useState(null)
   const [products, setProducts] = useState([])
+  const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
+  const [rating, setRating] = useState(5)
+  const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function loadAll() {
+    setLoading(true)
+
+    const { data: bizData } = await supabase
+      .from('businesses')
+      .select('id, name, address, city, state, business_type, whatsapp, hours, maps_link')
+      .eq('id', id)
+      .single()
+
+    const { data: productData } = await supabase
+      .from('products')
+      .select('id, name, generic_name, price, stock, emoji')
+      .eq('business_id', id)
+      .eq('list_on_carefind', true)
+      .gt('stock', 0)
+
+    const { data: reviewData } = await supabase
+      .from('reviews')
+      .select('id, rating, comment, created_at')
+      .eq('business_id', id)
+      .order('created_at', { ascending: false })
+
+    setBiz(bizData)
+    setProducts(productData || [])
+    setReviews(reviewData || [])
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-
-      const { data: bizData } = await supabase
-        .from('businesses')
-        .select('id, name, address, city, state, business_type, whatsapp, hours, maps_link')
-        .eq('id', id)
-        .single()
-
-      const { data: productData } = await supabase
-        .from('products')
-        .select('id, name, generic_name, price, stock, emoji')
-        .eq('business_id', id)
-        .eq('list_on_carefind', true)
-        .gt('stock', 0)
-
-      setBiz(bizData)
-      setProducts(productData || [])
-      setLoading(false)
-    }
-    load()
+    loadAll()
+    // eslint-disable-next-line
   }, [id])
+
+  async function handleSubmitReview(e) {
+    e.preventDefault()
+    if (!user) return
+    setSubmitting(true)
+
+    const { error } = await supabase.from('reviews').insert({
+      business_id: id,
+      user_id: user.id,
+      rating,
+      comment,
+    })
+
+    if (!error) {
+      setComment('')
+      setRating(5)
+      loadAll()
+    } else {
+      console.error('Review error:', error)
+    }
+    setSubmitting(false)
+  }
 
   if (loading) return <div style={{ padding: 20, fontFamily: 'sans-serif' }}>Loading...</div>
   if (!biz) return <div style={{ padding: 20, fontFamily: 'sans-serif' }}>Business not found.</div>
+
+  const avgRating = reviews.length
+    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+    : null
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
       <Link to="/" style={{ color: '#0f766e', textDecoration: 'none', fontSize: 14 }}>← Back to search</Link>
 
       <h1 style={{ fontSize: 22, margin: '12px 0 4px 0' }}>{biz.name}</h1>
-      <p style={{ color: '#666', margin: '0 0 12px 0' }}>{biz.business_type} · {biz.city}, {biz.state}</p>
+      <p style={{ color: '#666', margin: '0 0 4px 0' }}>{biz.business_type} · {biz.city}, {biz.state}</p>
+
+      {avgRating && (
+        <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>
+          ⭐ {avgRating} ({reviews.length} review{reviews.length !== 1 ? 's' : ''})
+        </p>
+      )}
+
       <p style={{ margin: '0 0 4px 0' }}>{biz.address}</p>
       {biz.hours && <p style={{ margin: '0 0 4px 0', color: '#666', fontSize: 14 }}>Hours: {biz.hours}</p>}
 
@@ -70,12 +118,60 @@ function BusinessProfile() {
       <h2 style={{ fontSize: 18, marginTop: 24, marginBottom: 12 }}>Available Products</h2>
       {products.length === 0 && <p style={{ color: '#666' }}>No products listed yet.</p>}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
         {products.map((p) => (
           <div key={p.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
             <p style={{ margin: '0 0 2px 0', fontWeight: 600 }}>{p.emoji ? `${p.emoji} ` : ''}{p.name}</p>
             {p.generic_name && <p style={{ margin: '0 0 2px 0', color: '#666', fontSize: 13 }}>{p.generic_name}</p>}
             <p style={{ margin: 0, fontSize: 14 }}>₦{p.price} · In stock: {p.stock}</p>
+          </div>
+        ))}
+      </div>
+
+      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Reviews</h2>
+
+      {user ? (
+        <form onSubmit={handleSubmitReview} style={{ marginBottom: 20, border: '1px solid #eee', borderRadius: 10, padding: 14 }}>
+          <div style={{ marginBottom: 8 }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                type="button"
+                key={n}
+                onClick={() => setRating(n)}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: n <= rating ? '#f5b301' : '#ccc' }}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Share your experience..."
+            rows={3}
+            style={{ width: '100%', padding: 8, fontSize: 14, border: '1px solid #ccc', borderRadius: 8, fontFamily: 'inherit' }}
+          />
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{ marginTop: 8, padding: '8px 16px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600 }}
+          >
+            {submitting ? 'Posting...' : 'Post Review'}
+          </button>
+        </form>
+      ) : (
+        <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+          <Link to="/login" style={{ color: '#0f766e', fontWeight: 600 }}>Log in</Link> to leave a review.
+        </p>
+      )}
+
+      {reviews.length === 0 && <p style={{ color: '#666' }}>No reviews yet. Be the first!</p>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {reviews.map((r) => (
+          <div key={r.id} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
+            <p style={{ margin: '0 0 4px 0' }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+            {r.comment && <p style={{ margin: 0, fontSize: 14 }}>{r.comment}</p>}
           </div>
         ))}
       </div>
