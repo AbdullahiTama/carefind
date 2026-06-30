@@ -6,6 +6,7 @@ import App from './App.jsx'
 import BusinessProfile from './BusinessProfile.jsx'
 import Login from './Login.jsx'
 import Profile from './Profile.jsx'
+import Feed from './Feed.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -16,6 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/business/:id" element={<BusinessProfile />} />
           <Route path="/login" element={<Login />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/feed" element={<Feed />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
