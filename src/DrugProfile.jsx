@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
+import { getSentimentSummary } from './lib/sentiment'
+import { analyzeReviews } from './lib/reviewAI'
 import BottomNav from './BottomNav.jsx'
 
 function DrugProfile() {
@@ -16,6 +18,8 @@ function DrugProfile() {
   const [submitting, setSubmitting] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState(null)
   const [userReviewedIds, setUserReviewedIds] = useState([])
+  const [aiInsights, setAiInsights] = useState(null)
+  const [analyzingAI, setAnalyzingAI] = useState(false)
 
   async function loadAll() {
     setLoading(true)
@@ -146,36 +150,147 @@ function DrugProfile() {
       </div>
 
       <div style={{ padding: '20px 20px 0 20px' }}>
-        {avgRating && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
-              Review Intelligence
-            </p>
-            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                <span style={{ fontSize: 28, fontWeight: 900, color: theme.navy }}>{avgRating}</span>
-                <div>
-                  <p style={{ margin: 0, color: theme.warning, fontSize: 14 }}>{'★'.repeat(Math.round(Number(avgRating)))}{'☆'.repeat(5 - Math.round(Number(avgRating)))}</p>
-                  <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>{reviews.length} review{reviews.length !== 1 ? 's' : ''} from users</p>
-                </div>
-              </div>
-              {ratingBreakdown.map((r) => (
-                <div key={r.star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span style={{ fontSize: 11.5, color: theme.textMid, width: 12 }}>{r.star}</span>
-                  <span style={{ fontSize: 11, color: theme.warning }}>★</span>
-                  <div style={{ flex: 1, height: 6, background: theme.bg, borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${r.pct}%`, height: '100%', background: r.star >= 4 ? theme.success : r.star === 3 ? theme.warning : theme.alert, borderRadius: 4 }} />
+        {reviews.length > 0 && (() => {
+          const { positive, negative, neutral, themes } = getSentimentSummary(reviews)
+          return (
+            <>
+              <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+                Review Intelligence
+              </p>
+              <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                  <span style={{ fontSize: 28, fontWeight: 900, color: theme.navy }}>{avgRating}</span>
+                  <div>
+                    <p style={{ margin: 0, color: theme.warning, fontSize: 14 }}>{'★'.repeat(Math.round(Number(avgRating)))}{'☆'.repeat(5 - Math.round(Number(avgRating)))}</p>
+                    <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>{reviews.length} review{reviews.length !== 1 ? 's' : ''} from users</p>
                   </div>
-                  <span style={{ fontSize: 11, color: theme.textLight, width: 24 }}>{r.count}</span>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
 
-        <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
-          Where to Buy ({products.length})
-        </p>
+                {ratingBreakdown.map((r) => (
+                  <div key={r.star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <span style={{ fontSize: 11.5, color: theme.textMid, width: 12 }}>{r.star}</span>
+                    <span style={{ fontSize: 11, color: theme.warning }}>★</span>
+                    <div style={{ flex: 1, height: 6, background: theme.bg, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${r.pct}%`, height: '100%', background: r.star >= 4 ? theme.success : r.star === 3 ? theme.warning : theme.alert, borderRadius: 4 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: theme.textLight, width: 24 }}>{r.count}</span>
+                  </div>
+                ))}
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <div style={{ flex: 1, background: '#ecfdf5', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: theme.success }}>{positive.length}</p>
+                    <p style={{ margin: 0, fontSize: 10.5, color: theme.success, fontWeight: 700 }}>Positive</p>
+                  </div>
+                  <div style={{ flex: 1, background: '#fef9c3', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: theme.warning }}>{neutral.length}</p>
+                    <p style={{ margin: 0, fontSize: 10.5, color: theme.warning, fontWeight: 700 }}>Neutral</p>
+                  </div>
+                  <div style={{ flex: 1, background: '#fef2f2', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: theme.alert }}>{negative.length}</p>
+                    <p style={{ margin: 0, fontSize: 10.5, color: theme.alert, fontWeight: 700 }}>Negative</p>
+                  </div>
+                </div>
+
+                {themes.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <p style={{ margin: '0 0 8px 0', fontSize: 11, fontWeight: 800, color: theme.textMid, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Common themes</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {themes.map((t) => (
+                        <span key={t} style={{ padding: '4px 10px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 20, fontSize: 12, color: theme.textMid, fontWeight: 600 }}>
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )
+        })()}
+
+        {(analyzingAI || aiInsights) && (
+          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+              🤖 AI Intelligence
+            </p>
+
+            {analyzingAI && (
+              <p style={{ fontSize: 13, color: theme.textLight }}>Analyzing reviews...</p>
+            )}
+
+            {aiInsights && (
+              <>
+                {aiInsights.summary && (
+                  <p style={{ fontSize: 13.5, color: theme.textMid, lineHeight: 1.6, margin: '0 0 14px 0', fontStyle: 'italic' }}>
+                    "{aiInsights.summary}"
+                  </p>
+                )}
+
+                {aiInsights.sideEffects?.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: 11.5, fontWeight: 800, color: theme.alert }}>⚠️ Side Effects Reported</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {aiInsights.sideEffects.map((s) => (
+                        <span key={s} style={{ padding: '3px 10px', background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 20, fontSize: 12, color: theme.alert, fontWeight: 600 }}>
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {aiInsights.efficacyReports?.positive?.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: 11.5, fontWeight: 800, color: theme.success }}>✅ Efficacy — Positive</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {aiInsights.efficacyReports.positive.map((e) => (
+                        <p key={e} style={{ margin: 0, fontSize: 12.5, color: theme.textMid }}>• {e}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {aiInsights.efficacyReports?.negative?.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: 11.5, fontWeight: 800, color: theme.warning }}>⚠️ Efficacy — Concerns</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {aiInsights.efficacyReports.negative.map((e) => (
+                        <p key={e} style={{ margin: 0, fontSize: 12.5, color: theme.textMid }}>• {e}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {aiInsights.positiveThemes?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: 11.5, fontWeight: 800, color: theme.success }}>👍 People Also Praise</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {aiInsights.positiveThemes.map((t) => (
+                        <span key={t} style={{ padding: '3px 10px', background: '#ecfdf5', border: `1px solid #bbf7d0`, borderRadius: 20, fontSize: 12, color: theme.success, fontWeight: 600 }}>
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {aiInsights.negativeThemes?.length > 0 && (
+                  <div>
+                    <p style={{ margin: '0 0 6px 0', fontSize: 11.5, fontWeight: 800, color: theme.alert }}>👎 People Also Complain</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {aiInsights.negativeThemes.map((t) => (
+                        <span key={t} style={{ padding: '3px 10px', background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 20, fontSize: 12, color: theme.alert, fontWeight: 600 }}>
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
           {products.sort((a, b) => a.price - b.price).map((p) => (
             <div key={p.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
