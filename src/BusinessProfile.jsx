@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
+import { getSentimentSummary } from './lib/sentiment'
 
 function BusinessProfile() {
   const { id } = useParams()
@@ -151,6 +152,41 @@ function BusinessProfile() {
         <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
           Reviews
         </p>
+
+        {reviews.length > 0 && (() => {
+          const { positive, negative, neutral, themes } = getSentimentSummary(reviews)
+          return (
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: 16 }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: 12, fontWeight: 800, color: theme.textMid, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sentiment</p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <div style={{ flex: 1, background: '#ecfdf5', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 16, fontWeight: 900, color: theme.success }}>{positive.length}</p>
+                  <p style={{ margin: 0, fontSize: 10.5, color: theme.success, fontWeight: 700 }}>Positive</p>
+                </div>
+                <div style={{ flex: 1, background: '#fef9c3', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 16, fontWeight: 900, color: theme.warning }}>{neutral.length}</p>
+                  <p style={{ margin: 0, fontSize: 10.5, color: theme.warning, fontWeight: 700 }}>Neutral</p>
+                </div>
+                <div style={{ flex: 1, background: '#fef2f2', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 16, fontWeight: 900, color: theme.alert }}>{negative.length}</p>
+                  <p style={{ margin: 0, fontSize: 10.5, color: theme.alert, fontWeight: 700 }}>Negative</p>
+                </div>
+              </div>
+              {themes.length > 0 && (
+                <>
+                  <p style={{ margin: '0 0 6px 0', fontSize: 11, fontWeight: 800, color: theme.textMid, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Common themes</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {themes.map((t) => (
+                      <span key={t} style={{ padding: '4px 10px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 20, fontSize: 12, color: theme.textMid, fontWeight: 600 }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })()}
 
         {user ? (
           <form onSubmit={handleSubmitReview} style={{ marginBottom: 18, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
