@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
+import { useAuth } from './lib/AuthContext'
 
 function App() {
+  const { user, signOut } = useAuth()
   const [mode, setMode] = useState('business') // 'business' or 'medication'
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -74,6 +76,21 @@ function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        {user ? (
+          <button
+            onClick={() => signOut()}
+            style={{ background: 'none', border: 'none', color: '#0f766e', fontSize: 14, fontWeight: 600 }}
+          >
+            Log Out
+          </button>
+        ) : (
+          <Link to="/login" style={{ color: '#0f766e', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
+            Log In / Sign Up
+          </Link>
+        )}
+      </div>
+
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>CareFind</h1>
       <p style={{ color: '#666', marginBottom: 16 }}>Find pharmacies, hospitals & clinics near you</p>
 
