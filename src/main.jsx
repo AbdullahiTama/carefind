@@ -12,6 +12,7 @@ import SavedPosts from './SavedPosts.jsx'
 import VerifyProfessional from './VerifyProfessional.jsx'
 import ClaimBusiness from './ClaimBusiness.jsx'
 import Dashboard from './Dashboard.jsx'
+import BusinessDashboard from './BusinessDashboard.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/verify" element={<VerifyProfessional />} />
           <Route path="/claim-business" element={<ClaimBusiness />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/business-dashboard" element={<BusinessDashboard />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
