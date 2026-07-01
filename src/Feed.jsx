@@ -763,79 +763,53 @@ function Feed() {
               borderTop: `1px solid ${theme.border}`, marginTop: 8,
               marginLeft: post.post_type === 'visual' ? 16 : 0, marginRight: post.post_type === 'visual' ? 16 : 0,
               marginBottom: post.post_type === 'visual' ? 16 : 0,
+              display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '4px 0',
             }}>
-              <div style={{ display: 'flex' }}>
-                <button
-                  onClick={() => toggleLike(post.id)}
-                  disabled={!user}
-                  style={{
-                    flex: 1, background: 'none', border: 'none', fontSize: 12, cursor: user ? 'pointer' : 'default',
-                    color: userHasLiked(post.id) ? theme.tealDeep : '#555', fontWeight: 600,
-                    padding: '9px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                  }}
-                >
-                  <span style={{ fontSize: 15 }}>{userHasLiked(post.id) ? '❤️' : '🤍'}</span> Like
-                </button>
-                <button
-                  onClick={() => toggleComments(post.id)}
-                  style={{
-                    flex: 1, background: 'none', border: 'none', fontSize: 12, color: '#555', fontWeight: 600,
-                    cursor: 'pointer', padding: '9px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                  }}
-                >
-                  <span style={{ fontSize: 15 }}>💬</span> Comment
-                </button>
-                <button
-                  onClick={() => { if (navigator.share) { navigator.share({ title: 'CareFind', text: post.content, url: window.location.href }) } }}
-                  style={{
-                    flex: 1, background: 'none', border: 'none', fontSize: 12, color: '#555', fontWeight: 600,
-                    cursor: 'pointer', padding: '9px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                  }}
-                >
-                  <span style={{ fontSize: 15 }}>↗️</span> Share
-                </button>
-              </div>
-              <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
-                <button
-                  onClick={() => toggleSave(post.id)}
-                  disabled={!user}
-                  style={{
-                    flex: 1, background: 'none', border: 'none', fontSize: 12,
-                    color: isSaved(post.id) ? theme.tealDeep : '#555', fontWeight: 600,
-                    cursor: user ? 'pointer' : 'default', padding: '9px 0',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                  }}
-                >
-                  <span style={{ fontSize: 14 }}>{isSaved(post.id) ? '🔖' : '📑'}</span> Save
-                </button>
-                {user && (
-                  <button
-                    onClick={() => setGiftingPost({ postId: post.id, authorId: post.user_id })}
-                    style={{
-                      flex: 1, background: 'none', border: 'none', fontSize: 12,
-                      color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', padding: '9px 0',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>🎁</span> Gift
-                  </button>
-                )}
-                {user && post.user_id !== user.id && (
-                  <button
-                    onClick={() => handleReport(post.id)}
-                    disabled={reportedPosts.includes(post.id) || reportingId === post.id}
-                    style={{
-                      flex: 1, background: 'none', border: 'none', fontSize: 12,
-                      color: reportedPosts.includes(post.id) ? theme.textLight : '#555', fontWeight: 600,
-                      cursor: 'pointer', padding: '9px 0',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>🚩</span>
-                    {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
-                  </button>
-                )}
-              </div>
+              {/* Like */}
+              <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill={userHasLiked(post.id) ? theme.tealDeep : 'none'} stroke={userHasLiked(post.id) ? theme.tealDeep : '#555'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                <span style={{ fontSize: 11, color: userHasLiked(post.id) ? theme.tealDeep : '#777', fontWeight: 600 }}>{likeCount(post.id) || 'Like'}</span>
+              </button>
+
+              {/* Comment */}
+              <button onClick={() => toggleComments(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span style={{ fontSize: 11, color: '#777', fontWeight: 600 }}>{comments[post.id] ? comments[post.id].length : 'Comment'}</span>
+              </button>
+
+              {/* Save */}
+              <button onClick={() => toggleSave(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill={isSaved(post.id) ? theme.tealDeep : 'none'} stroke={isSaved(post.id) ? theme.tealDeep : '#555'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span style={{ fontSize: 11, color: isSaved(post.id) ? theme.tealDeep : '#777', fontWeight: 600 }}>Save</span>
+              </button>
+
+              {/* Gift */}
+              <button onClick={() => user ? setGiftingPost({ postId: post.id, authorId: post.user_id }) : window.location.href = '/login'} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={theme.tealDeep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 12 20 22 4 22 4 12"/>
+                  <rect x="2" y="7" width="20" height="5"/>
+                  <line x1="12" y1="22" x2="12" y2="7"/>
+                  <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                  <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+                </svg>
+                <span style={{ fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>Gift</span>
+              </button>
+
+              {/* Share */}
+              <button onClick={() => { if (navigator.share) { navigator.share({ title: 'CareFind', text: post.content, url: window.location.href }) } }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+                <span style={{ fontSize: 11, color: '#777', fontWeight: 600 }}>Share</span>
+              </button>
             </div>
 
             {openComments[post.id] && (
