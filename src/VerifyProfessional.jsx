@@ -16,7 +16,12 @@ function VerifyProfessional() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const professions = ['Pharmacist', 'Medical Doctor', 'Nurse', 'Dentist', 'Optometrist', 'Other Healthcare Professional']
+  const professions = [
+    'Pharmacist', 'Medical Doctor', 'Cardiologist', 'Surgeon', 'Pediatrician',
+    'Dentist', 'Optometrist', 'Nurse', 'Dermatologist', 'Gynaecologist',
+    'Psychiatrist', 'Physiotherapist', 'Radiologist', 'Nutritionist / Dietitian',
+    'Other Healthcare Professional',
+  ]
 
   useEffect(() => {
     async function load() {
@@ -64,6 +69,9 @@ function VerifyProfessional() {
       profession,
       credential_url: urlData.publicUrl,
     })
+
+    // Pre-save specialty to profile so it's searchable even before approval
+    await supabase.from('profiles').update({ specialty: profession }).eq('id', user.id)
 
     if (insertError) {
       setError('Something went wrong submitting your request.')
@@ -127,7 +135,7 @@ function VerifyProfessional() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 700 }}>Profession</label>
+                <label style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 700 }}>Specialty / Role</label>
                 <select
                   value={profession}
                   onChange={(e) => setProfession(e.target.value)}
