@@ -86,10 +86,18 @@ function Wallet() {
     if (!user) return
     const ref = `cf_${user.id.slice(0, 8)}_${Date.now()}`
     const callbackUrl = `${window.location.origin}/wallet?reference=${ref}&coins=${pkg.coins}&naira=${pkg.naira}`
-    const paystackUrl = `https://paystack.com/pay/carefind?amount=${pkg.naira * 100}&email=${encodeURIComponent(user.email)}&ref=${ref}&callback_url=${encodeURIComponent(callbackUrl)}&currency=NGN`
 
-    // Open Paystack standard checkout in same tab
-    window.location.href = `https://paystack.com/pay/${ref}?key=pk_live_e900fe13bcce2afbf439e50b11197db8d2c949d9&amount=${pkg.naira * 100}&email=${encodeURIComponent(user.email)}&callback_url=${encodeURIComponent(callbackUrl)}&currency=NGN`
+    // Build Paystack standard checkout URL
+    const params = new URLSearchParams({
+      key: 'pk_live_e900fe13bcce2afbf439e50b11197db8d2c949d9',
+      email: user.email,
+      amount: pkg.naira * 100,
+      ref: ref,
+      currency: 'NGN',
+      callback_url: callbackUrl,
+    })
+
+    window.location.href = `https://checkout.paystack.com/?${params.toString()}`
   }
 
   function timeAgo(dateStr) {
