@@ -82,22 +82,33 @@ function Wallet() {
     if (!authLoading) load()
   }, [user, authLoading])
 
-  function handleTopUp(pkg) {
+  async function handleTopUp(pkg) {
     if (!user) return
     const ref = `cf_${user.id.slice(0, 8)}_${Date.now()}`
     const callbackUrl = `${window.location.origin}/wallet?reference=${ref}&coins=${pkg.coins}&naira=${pkg.naira}`
 
-    // Build Paystack standard checkout URL
-    const params = new URLSearchParams({
-      key: 'pk_live_e900fe13bcce2afbf439e50b11197db8d2c949d9',
-      email: user.email,
-      amount: pkg.naira * 100,
-      ref: ref,
-      currency: 'NGN',
-      callback_url: callbackUrl,
-    })
+    try {
+      const response = await fetch('/api/initiate-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          amount: pkg.naira * 100,
+          ref,
+          callback_url: callbackUrl,
+        }),
+      })
 
-    window.location.href = `https://checkout.paystack.com/?${params.toString()}`
+      const data = await response.json()
+
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url
+      } else {
+        alert(`Payment error: ${data.error || 'Could not initialize payment'}`)
+      }
+    } catch (err) {
+      alert('Network error. Please check your connection and try again.')
+    }
   }
 
   function timeAgo(dateStr) {
