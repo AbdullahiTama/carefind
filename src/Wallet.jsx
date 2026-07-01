@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
@@ -19,22 +19,44 @@ function Wallet() {
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('wallet')
-  const [paystackReady, setPaystackReady] = useState(false)
-  const [paying, setPaying] = useState(false)
+  const [searchParams] = useSearchParams()
 
+  // Handle return from Paystack redirect
   useEffect(() => {
-    // Load Paystack script immediately
-    if (document.getElementById('paystack-script')) {
-      setPaystackReady(true)
-      return
+    async function handlePaystackReturn() {
+      const ref = searchParams.get('reference')
+      const coins = searchParams.get('coins')
+      const naira = searchParams.get('naira')
+
+      if (ref && coins && user) {
+        // Check if already processed
+        const { data: existing } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('reference', ref)
+          .maybeSingle()
+
+        if (!existing) {
+          const newCoins = parseInt(coins)
+          const newBalance = (wallet?.balance || 0) + newCoins
+
+          await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', user.id)
+          await supabase.from('transactions').insert({
+            user_id: user.id, type: 'topup', amount: newCoins,
+            naira_amount: parseInt(naira) * 100, reference: ref, status: 'success',
+          })
+
+          setWallet((prev) => ({ ...prev, balance: newBalance }))
+          setTab('history')
+          alert(`✅ ${newCoins} CareCoins added to your wallet!`)
+
+          // Clean URL
+          window.history.replaceState({}, '', '/wallet')
+        }
+      }
     }
-    const script = document.createElement('script')
-    script.id = 'paystack-script'
-    script.src = 'https://js.paystack.co/v1/inline.js'
-    script.onload = () => setPaystackReady(true)
-    script.onerror = () => console.error('Paystack failed to load')
-    document.head.appendChild(script)
-  }, [])
+    if (!authLoading && user && wallet) handlePaystackReturn()
+  }, [searchParams, user, authLoading, wallet])
 
   useEffect(() => {
     async function load() {
@@ -61,34 +83,13 @@ function Wallet() {
   }, [user, authLoading])
 
   function handleTopUp(pkg) {
-    if (!window.PaystackPop) {
-      alert('Payment system not ready. Please refresh the page and try again.')
-      return
-    }
-    if (paying) return
-    setPaying(true)
-    console.log('Starting Paystack for', pkg.label, '- amount:', pkg.naira * 100)
+    if (!user) return
+    const ref = `cf_${user.id.slice(0, 8)}_${Date.now()}`
+    const callbackUrl = `${window.location.origin}/wallet?reference=${ref}&coins=${pkg.coins}&naira=${pkg.naira}`
+    const paystackUrl = `https://paystack.com/pay/carefind?amount=${pkg.naira * 100}&email=${encodeURIComponent(user.email)}&ref=${ref}&callback_url=${encodeURIComponent(callbackUrl)}&currency=NGN`
 
-    const handler = window.PaystackPop.setup({
-      key: 'pk_live_e900fe13bcce2afbf439e50b11197db8d2c949d9',
-      email: user.email,
-      amount: pkg.naira * 100,
-      ref: `cf_${user.id.slice(0,8)}_${Date.now()}`,
-      currency: 'NGN',
-      callback: async (response) => {
-        const newBalance = (wallet?.balance || 0) + pkg.coins
-        await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', user.id)
-        await supabase.from('transactions').insert({
-          user_id: user.id, type: 'topup', amount: pkg.coins,
-          naira_amount: pkg.naira * 100, reference: response.reference, status: 'success',
-        })
-        setWallet((prev) => ({ ...prev, balance: newBalance }))
-        setPaying(false)
-        alert(`✅ ${pkg.coins} CareCoins added to your wallet!`)
-      },
-      onClose: () => setPaying(false),
-    })
-    handler.openIframe()
+    // Open Paystack standard checkout in same tab
+    window.location.href = `https://paystack.com/pay/${ref}?key=pk_live_e900fe13bcce2afbf439e50b11197db8d2c949d9&amount=${pkg.naira * 100}&email=${encodeURIComponent(user.email)}&callback_url=${encodeURIComponent(callbackUrl)}&currency=NGN`
   }
 
   function timeAgo(dateStr) {
@@ -133,7 +134,7 @@ function Wallet() {
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: 9, borderRadius: 12, border: tab === t ? 'none' : `1px solid ${theme.border}`,
               background: tab === t ? theme.tealGradient : theme.bg,
-              color: tab === t ? '#fff' : theme.textMid, fontWeight: 700, fontSize: 13, textTransform: 'capitalize',
+              color: tab === t ? '#fff' : theme.textMid, fontWeight: 700, fontSize: 13,
             }}>
               {t === 'wallet' ? 'Top Up' : t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
@@ -145,19 +146,15 @@ function Wallet() {
             <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px 0' }}>
               Choose a package
             </p>
-            {!paystackReady && (
-              <p style={{ fontSize: 12, color: theme.textLight, textAlign: 'center' }}>Loading payment system...</p>
-            )}
             {TOPUP_PACKAGES.map((pkg) => (
               <button
                 key={pkg.coins}
                 onClick={() => handleTopUp(pkg)}
-                disabled={paying || !paystackReady}
                 style={{
                   border: `1px solid ${theme.border}`, borderRadius: 16, padding: '16px 14px',
                   background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  textAlign: 'left', opacity: paying ? 0.7 : 1,
+                  textAlign: 'left', width: '100%',
                 }}
               >
                 <div>
@@ -173,6 +170,9 @@ function Wallet() {
                 </p>
               </button>
             ))}
+            <p style={{ fontSize: 11, color: theme.textLight, textAlign: 'center', marginTop: 4 }}>
+              Tapping a package will open Paystack to complete payment
+            </p>
           </div>
         )}
 
