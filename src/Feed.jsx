@@ -108,7 +108,7 @@ function Feed() {
       const userIds = [...new Set((postData || []).map((p) => p.user_id))]
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, is_verified')
+        .select('id, display_name, full_name, avatar_url, is_verified, verification_label, specialty')
         .in('id', userIds)
 
       const profileMap = {}
@@ -698,17 +698,22 @@ function Feed() {
                   {!profiles[post.user_id]?.avatar_url && (profiles[post.user_id]?.display_name?.[0]?.toUpperCase() || '?')}
                 </div>
                 <div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    {profiles[post.user_id]?.display_name || 'CareFind User'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy }}>
+                      {profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || 'CareFind User'}
+                    </span>
                     {profiles[post.user_id]?.is_verified && (
                       <span style={{
                         width: 14, height: 14, borderRadius: '50%', background: theme.tealDeep, color: '#fff',
                         fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900,
-                      }}>
-                        ✓
-                      </span>
+                      }}>✓</span>
                     )}
-                  </span>
+                  </div>
+                  {profiles[post.user_id]?.is_verified && (profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label) && (
+                    <span style={{ fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>
+                      ✓ {profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label}
+                    </span>
+                  )}
                   <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600 }}>{timeAgo(post.created_at)}</span>
                 </div>
               </Link>
