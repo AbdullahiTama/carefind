@@ -5,6 +5,7 @@ import { useAuth } from './lib/AuthContext'
 import BottomNav from './BottomNav.jsx'
 import { theme } from './lib/theme'
 import { wrapBold, wrapItalic, wrapHighlight, renderArticleHtml } from './lib/articleFormat'
+import GiftPanel from './GiftPanel.jsx'
 import { useRef } from 'react'
 
 function Feed() {
@@ -16,6 +17,7 @@ function Feed() {
   const [savedPosts, setSavedPosts] = useState([])
   const [reportedPosts, setReportedPosts] = useState([])
   const [reportingId, setReportingId] = useState(null)
+  const [giftingPost, setGiftingPost] = useState(null) // { postId, authorId }
   const [comments, setComments] = useState({})
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
@@ -822,6 +824,18 @@ function Feed() {
                   {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
                 </button>
               )}
+              {user && post.user_id !== user.id && (
+                <button
+                  onClick={() => setGiftingPost({ postId: post.id, authorId: post.user_id })}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', fontSize: 13,
+                    color: '#555', fontWeight: 600, cursor: 'pointer', padding: '10px 0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>🎁</span> Gift
+                </button>
+              )}
             </div>
 
             {openComments[post.id] && (
@@ -857,6 +871,13 @@ function Feed() {
         ))}
       </div>
       <BottomNav />
+      {giftingPost && (
+        <GiftPanel
+          postId={giftingPost.postId}
+          recipientId={giftingPost.authorId}
+          onClose={() => setGiftingPost(null)}
+        />
+      )}
     </div>
   )
 }
