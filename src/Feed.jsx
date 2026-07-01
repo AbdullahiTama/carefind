@@ -760,82 +760,82 @@ function Feed() {
               </p>
             )}
             <div style={{
-              display: 'flex', borderTop: `1px solid ${theme.border}`, marginTop: 8,
+              borderTop: `1px solid ${theme.border}`, marginTop: 8,
               marginLeft: post.post_type === 'visual' ? 16 : 0, marginRight: post.post_type === 'visual' ? 16 : 0,
               marginBottom: post.post_type === 'visual' ? 16 : 0,
             }}>
-              <button
-                onClick={() => toggleLike(post.id)}
-                disabled={!user}
-                style={{
-                  flex: 1, background: 'none', border: 'none', fontSize: 13, cursor: user ? 'pointer' : 'default',
-                  color: userHasLiked(post.id) ? '#0f766e' : '#555', fontWeight: 600,
-                  padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                <span style={{ fontSize: 16 }}>{userHasLiked(post.id) ? '❤️' : '🤍'}</span> Like
-              </button>
-              <button
-                onClick={() => toggleComments(post.id)}
-                style={{
-                  flex: 1, background: 'none', border: 'none', fontSize: 13, color: '#555', fontWeight: 600,
-                  cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                <span style={{ fontSize: 16 }}>💬</span> Comment
-              </button>
-              <button
-                onClick={() => {
-                  if (navigator.share) {
-                    navigator.share({ title: 'CareFind', text: post.content, url: window.location.href })
-                  }
-                }}
-                style={{
-                  flex: 1, background: 'none', border: 'none', fontSize: 13, color: '#555', fontWeight: 600,
-                  cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                <span style={{ fontSize: 16 }}>↗️</span> Share
-              </button>
-              <button
-                onClick={() => toggleSave(post.id)}
-                disabled={!user}
-                style={{
-                  flex: 1, background: 'none', border: 'none', fontSize: 13,
-                  color: isSaved(post.id) ? theme.tealDeep : '#555', fontWeight: 600,
-                  cursor: user ? 'pointer' : 'default', padding: '10px 0',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                <span style={{ fontSize: 16 }}>{isSaved(post.id) ? '🔖' : '📑'}</span> Save
-              </button>
-              {user && post.user_id !== user.id && (
+              <div style={{ display: 'flex' }}>
                 <button
-                  onClick={() => handleReport(post.id)}
-                  disabled={reportedPosts.includes(post.id) || reportingId === post.id}
+                  onClick={() => toggleLike(post.id)}
+                  disabled={!user}
                   style={{
-                    flex: 1, background: 'none', border: 'none', fontSize: 13,
-                    color: reportedPosts.includes(post.id) ? theme.textLight : '#555', fontWeight: 600,
-                    cursor: 'pointer', padding: '10px 0',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    flex: 1, background: 'none', border: 'none', fontSize: 12, cursor: user ? 'pointer' : 'default',
+                    color: userHasLiked(post.id) ? theme.tealDeep : '#555', fontWeight: 600,
+                    padding: '9px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>🚩</span>
-                  {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
+                  <span style={{ fontSize: 15 }}>{userHasLiked(post.id) ? '❤️' : '🤍'}</span> Like
                 </button>
-              )}
-              {user && post.user_id !== user.id && (
                 <button
-                  onClick={() => setGiftingPost({ postId: post.id, authorId: post.user_id })}
+                  onClick={() => toggleComments(post.id)}
                   style={{
-                    flex: 1, background: 'none', border: 'none', fontSize: 13,
-                    color: '#555', fontWeight: 600, cursor: 'pointer', padding: '10px 0',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    flex: 1, background: 'none', border: 'none', fontSize: 12, color: '#555', fontWeight: 600,
+                    cursor: 'pointer', padding: '9px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>🎁</span> Gift
+                  <span style={{ fontSize: 15 }}>💬</span> Comment
                 </button>
-              )}
+                <button
+                  onClick={() => { if (navigator.share) { navigator.share({ title: 'CareFind', text: post.content, url: window.location.href }) } }}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', fontSize: 12, color: '#555', fontWeight: 600,
+                    cursor: 'pointer', padding: '9px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                  }}
+                >
+                  <span style={{ fontSize: 15 }}>↗️</span> Share
+                </button>
+              </div>
+              <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
+                <button
+                  onClick={() => toggleSave(post.id)}
+                  disabled={!user}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', fontSize: 12,
+                    color: isSaved(post.id) ? theme.tealDeep : '#555', fontWeight: 600,
+                    cursor: user ? 'pointer' : 'default', padding: '9px 0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>{isSaved(post.id) ? '🔖' : '📑'}</span> Save
+                </button>
+                {user && post.user_id !== user.id && (
+                  <button
+                    onClick={() => setGiftingPost({ postId: post.id, authorId: post.user_id })}
+                    style={{
+                      flex: 1, background: 'none', border: 'none', fontSize: 12,
+                      color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', padding: '9px 0',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>🎁</span> Gift
+                  </button>
+                )}
+                {user && post.user_id !== user.id && (
+                  <button
+                    onClick={() => handleReport(post.id)}
+                    disabled={reportedPosts.includes(post.id) || reportingId === post.id}
+                    style={{
+                      flex: 1, background: 'none', border: 'none', fontSize: 12,
+                      color: reportedPosts.includes(post.id) ? theme.textLight : '#555', fontWeight: 600,
+                      cursor: 'pointer', padding: '9px 0',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>🚩</span>
+                    {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
+                  </button>
+                )}
+              </div>
             </div>
 
             {openComments[post.id] && (
