@@ -5,9 +5,7 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 
-const COIN_VALUE_NAIRA = 200 // 1 CareCoin = ₦200
-const PLATFORM_CUT = 0.20 // 20% commission
-
+const COIN_VALUE_NAIRA = 200
 const TOPUP_PACKAGES = [
   { coins: 1, naira: 200, label: 'Starter' },
   { coins: 5, naira: 950, label: 'Popular', savings: 50 },
@@ -21,39 +19,41 @@ function Wallet() {
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('wallet')
+  const [paystackReady, setPaystackReady] = useState(false)
   const [paying, setPaying] = useState(false)
-  const [selectedPackage, setSelectedPackage] = useState(null)
+
+  useEffect(() => {
+    // Load Paystack script immediately
+    if (document.getElementById('paystack-script')) {
+      setPaystackReady(true)
+      return
+    }
+    const script = document.createElement('script')
+    script.id = 'paystack-script'
+    script.src = 'https://js.paystack.co/v1/inline.js'
+    script.onload = () => setPaystackReady(true)
+    script.onerror = () => console.error('Paystack failed to load')
+    document.head.appendChild(script)
+  }, [])
 
   useEffect(() => {
     async function load() {
       if (!user) { setLoading(false); return }
       setLoading(true)
 
-      // Get or create wallet
       let { data: walletData } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
+        .from('wallets').select('*').eq('user_id', user.id).maybeSingle()
 
       if (!walletData) {
         const { data: newWallet } = await supabase
-          .from('wallets')
-          .insert({ user_id: user.id, balance: 0 })
-          .select()
-          .single()
+          .from('wallets').insert({ user_id: user.id, balance: 0 }).select().single()
         walletData = newWallet
       }
-
       setWallet(walletData)
 
       const { data: txData } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(20)
-
+        .from('transactions').select('*').eq('user_id', user.id)
+        .order('created_at', { ascending: false }).limit(20)
       setTransactions(txData || [])
       setLoading(false)
     }
@@ -61,54 +61,33 @@ function Wallet() {
   }, [user, authLoading])
 
   function handleTopUp(pkg) {
-    setSelectedPackage(pkg)
-    const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY
-    const amount = pkg.naira * 100 // Paystack uses kobo
-    const ref = `carefind_${user.id}_${Date.now()}`
-
-    // Load Paystack inline script dynamically
-    const script = document.createElement('script')
-    script.src = 'https://js.paystack.co/v1/inline.js'
-    script.onload = () => {
-      const handler = window.PaystackPop.setup({
-        key: publicKey,
-        email: user.email,
-        amount,
-        ref,
-        currency: 'NGN',
-        metadata: {
-          user_id: user.id,
-          coins: pkg.coins,
-          package: pkg.label,
-        },
-        callback: async (response) => {
-          // Payment successful — credit wallet
-          await supabase.from('wallets').update({
-            balance: (wallet?.balance || 0) + pkg.coins,
-          }).eq('user_id', user.id)
-
-          await supabase.from('transactions').insert({
-            user_id: user.id,
-            type: 'topup',
-            amount: pkg.coins,
-            naira_amount: pkg.naira * 100,
-            reference: response.reference,
-            status: 'success',
-          })
-
-          setWallet((prev) => ({ ...prev, balance: (prev?.balance || 0) + pkg.coins }))
-          setSelectedPackage(null)
-          alert(`✅ ${pkg.coins} CareCoins added to your wallet!`)
-        },
-        onClose: () => {
-          setSelectedPackage(null)
-          setPaying(false)
-        },
-      })
-      handler.openIframe()
+    if (!paystackReady || !window.PaystackPop) {
+      alert('Payment system loading, please try again in a moment.')
+      return
     }
-    document.body.appendChild(script)
+    if (paying) return
     setPaying(true)
+
+    const handler = window.PaystackPop.setup({
+      key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+      email: user.email,
+      amount: pkg.naira * 100,
+      ref: `cf_${user.id.slice(0,8)}_${Date.now()}`,
+      currency: 'NGN',
+      callback: async (response) => {
+        const newBalance = (wallet?.balance || 0) + pkg.coins
+        await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', user.id)
+        await supabase.from('transactions').insert({
+          user_id: user.id, type: 'topup', amount: pkg.coins,
+          naira_amount: pkg.naira * 100, reference: response.reference, status: 'success',
+        })
+        setWallet((prev) => ({ ...prev, balance: newBalance }))
+        setPaying(false)
+        alert(`✅ ${pkg.coins} CareCoins added to your wallet!`)
+      },
+      onClose: () => setPaying(false),
+    })
+    handler.openIframe()
   }
 
   function timeAgo(dateStr) {
@@ -119,13 +98,7 @@ function Wallet() {
     return `${Math.floor(diff / 86400)}d ago`
   }
 
-  const txIcon = (type) => {
-    if (type === 'topup') return '🪙'
-    if (type === 'gift_sent') return '🎁'
-    if (type === 'gift_received') return '💰'
-    if (type === 'withdrawal') return '🏦'
-    return '💳'
-  }
+  const txIcon = (type) => ({ topup: '🪙', gift_sent: '🎁', gift_received: '💰', withdrawal: '🏦' }[type] || '💳')
 
   if (authLoading || loading) return <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif' }}>Loading...</div>
 
@@ -144,7 +117,6 @@ function Wallet() {
         <Link to="/profile" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Profile</Link>
         <h1 style={{ fontSize: 21, fontWeight: 900, margin: '14px 0 4px 0' }}>My Wallet</h1>
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: '0 0 20px 0' }}>CareCoins — 1 coin = ₦{COIN_VALUE_NAIRA}</p>
-
         <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 20, padding: 20, textAlign: 'center' }}>
           <p style={{ margin: '0 0 4px 0', fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>BALANCE</p>
           <p style={{ margin: '0 0 4px 0', fontSize: 42, fontWeight: 900 }}>🪙 {wallet?.balance || 0}</p>
@@ -156,36 +128,15 @@ function Wallet() {
 
       <div style={{ padding: '20px 20px 0 20px' }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          <button
-            onClick={() => setTab('wallet')}
-            style={{
-              flex: 1, padding: 9, borderRadius: 12, border: tab === 'wallet' ? 'none' : `1px solid ${theme.border}`,
-              background: tab === 'wallet' ? theme.tealGradient : theme.bg,
-              color: tab === 'wallet' ? '#fff' : theme.textMid, fontWeight: 700, fontSize: 13,
-            }}
-          >
-            Top Up
-          </button>
-          <button
-            onClick={() => setTab('history')}
-            style={{
-              flex: 1, padding: 9, borderRadius: 12, border: tab === 'history' ? 'none' : `1px solid ${theme.border}`,
-              background: tab === 'history' ? theme.tealGradient : theme.bg,
-              color: tab === 'history' ? '#fff' : theme.textMid, fontWeight: 700, fontSize: 13,
-            }}
-          >
-            History
-          </button>
-          <button
-            onClick={() => setTab('withdraw')}
-            style={{
-              flex: 1, padding: 9, borderRadius: 12, border: tab === 'withdraw' ? 'none' : `1px solid ${theme.border}`,
-              background: tab === 'withdraw' ? theme.tealGradient : theme.bg,
-              color: tab === 'withdraw' ? '#fff' : theme.textMid, fontWeight: 700, fontSize: 13,
-            }}
-          >
-            Withdraw
-          </button>
+          {['wallet', 'history', 'withdraw'].map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              flex: 1, padding: 9, borderRadius: 12, border: tab === t ? 'none' : `1px solid ${theme.border}`,
+              background: tab === t ? theme.tealGradient : theme.bg,
+              color: tab === t ? '#fff' : theme.textMid, fontWeight: 700, fontSize: 13, textTransform: 'capitalize',
+            }}>
+              {t === 'wallet' ? 'Top Up' : t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
         </div>
 
         {tab === 'wallet' && (
@@ -193,16 +144,19 @@ function Wallet() {
             <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px 0' }}>
               Choose a package
             </p>
+            {!paystackReady && (
+              <p style={{ fontSize: 12, color: theme.textLight, textAlign: 'center' }}>Loading payment system...</p>
+            )}
             {TOPUP_PACKAGES.map((pkg) => (
               <button
                 key={pkg.coins}
                 onClick={() => handleTopUp(pkg)}
-                disabled={paying}
+                disabled={paying || !paystackReady}
                 style={{
-                  border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14,
+                  border: `1px solid ${theme.border}`, borderRadius: 16, padding: '16px 14px',
                   background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  textAlign: 'left',
+                  textAlign: 'left', opacity: paying ? 0.7 : 1,
                 }}
               >
                 <div>
@@ -210,16 +164,12 @@ function Wallet() {
                     🪙 {pkg.coins} CareCoin{pkg.coins > 1 ? 's' : ''} — {pkg.label}
                   </p>
                   {pkg.savings && (
-                    <p style={{ margin: 0, fontSize: 11, color: theme.success, fontWeight: 700 }}>
-                      Save ₦{pkg.savings.toLocaleString()}
-                    </p>
+                    <p style={{ margin: 0, fontSize: 11, color: theme.success, fontWeight: 700 }}>Save ₦{pkg.savings.toLocaleString()}</p>
                   )}
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.tealDeep }}>
-                    ₦{pkg.naira.toLocaleString()}
-                  </p>
-                </div>
+                <p style={{ margin: 0, fontWeight: 900, fontSize: 17, color: theme.tealDeep }}>
+                  ₦{pkg.naira.toLocaleString()}
+                </p>
               </button>
             ))}
           </div>
@@ -235,8 +185,8 @@ function Wallet() {
             )}
             {transactions.map((tx) => (
               <div key={tx.id} style={{
-                border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12,
-                background: theme.cardBg, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 22 }}>{txIcon(tx.type)}</span>
@@ -247,10 +197,7 @@ function Wallet() {
                     <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{timeAgo(tx.created_at)}</p>
                   </div>
                 </div>
-                <p style={{
-                  margin: 0, fontWeight: 900, fontSize: 14,
-                  color: tx.type === 'topup' || tx.type === 'gift_received' ? theme.success : theme.alert,
-                }}>
+                <p style={{ margin: 0, fontWeight: 900, fontSize: 14, color: tx.type === 'topup' || tx.type === 'gift_received' ? theme.success : theme.alert }}>
                   {tx.type === 'topup' || tx.type === 'gift_received' ? '+' : '-'}{tx.amount} 🪙
                 </p>
               </div>
@@ -261,36 +208,30 @@ function Wallet() {
         {tab === 'withdraw' && (
           <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 16, background: theme.cardBg }}>
             <p style={{ fontSize: 13, color: theme.textMid, lineHeight: 1.6, margin: '0 0 12px 0' }}>
-              You can withdraw your earned CareCoins as naira to your bank account.
-              Minimum withdrawal: <strong>5 CareCoins (₦800 after 20% platform fee)</strong>.
+              Withdraw your earned CareCoins as naira to your bank account.
+              Minimum: <strong>5 CareCoins (₦800 after 20% platform fee)</strong>.
             </p>
             <p style={{ fontSize: 13, color: theme.textMid, margin: '0 0 16px 0' }}>
               Your balance: <strong>🪙 {wallet?.balance || 0} CareCoins</strong>
             </p>
             {(wallet?.balance || 0) >= 5 ? (
-              <button
-                style={{
-                  width: '100%', padding: 13, background: theme.tealGradient, color: '#fff',
-                  border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 14,
-                }}
-              >
+              <button style={{
+                width: '100%', padding: 13, background: theme.tealGradient, color: '#fff',
+                border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 14,
+              }}>
                 Request Withdrawal
               </button>
             ) : (
-              <div style={{ textAlign: 'center', padding: '10px 0' }}>
-                <p style={{ color: theme.textLight, fontSize: 13 }}>
-                  You need at least 5 CareCoins to withdraw.
-                  Receive gifts or top up to earn more.
-                </p>
-              </div>
+              <p style={{ color: theme.textLight, fontSize: 13, textAlign: 'center' }}>
+                You need at least 5 CareCoins to withdraw.
+              </p>
             )}
             <p style={{ fontSize: 11, color: theme.textLight, marginTop: 10, textAlign: 'center' }}>
-              Withdrawals are processed within 1-3 business days
+              Withdrawals processed within 1-3 business days
             </p>
           </div>
         )}
       </div>
-
       <BottomNav />
     </div>
   )
