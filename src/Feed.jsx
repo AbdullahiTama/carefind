@@ -18,7 +18,8 @@ function Feed() {
   const [savedPosts, setSavedPosts] = useState([])
   const [reportedPosts, setReportedPosts] = useState([])
   const [reportingId, setReportingId] = useState(null)
-  const [giftingPost, setGiftingPost] = useState(null) // { postId, authorId }
+  const [giftingPost, setGiftingPost] = useState(null)
+  const [composerOpen, setComposerOpen] = useState(false) // { postId, authorId }
   const [editingPost, setEditingPost] = useState(null) // { id, content }
   const [editingComment, setEditingComment] = useState(null) // { id, content, post_id }
   const [deletingId, setDeletingId] = useState(null)
@@ -35,6 +36,7 @@ function Feed() {
   const [posting, setPosting] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const articleTextareaRef = useRef(null)
+  const composerRef = useRef(null)
   const [highlightColor, setHighlightColor] = useState('#fde68a')
   const [reviewTarget, setReviewTarget] = useState(null) // { type: 'business'|'product', id, name }
   const [reviewSearch, setReviewSearch] = useState('')
@@ -441,7 +443,7 @@ function Feed() {
       </div>
 
       {user ? (
-        <form onSubmit={handlePost} style={{
+        <form ref={composerRef} id="post-composer" onSubmit={handlePost} style={{
           marginTop: 18, marginBottom: 16, background: theme.cardBg, border: `1px solid ${theme.border}`,
           borderRadius: 18, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
         }}>
