@@ -17,6 +17,7 @@ const CATEGORIES = [
   { key: 'medications', label: '💊 Medications', icon: '💊' },
   { key: 'businesses', label: '🏥 Businesses', icon: '🏥' },
   { key: 'professionals', label: '🩺 Professionals', icon: '🩺' },
+  { key: 'people', label: '👥 People', icon: '👥' },
   { key: 'reviews', label: '⭐ Reviews', icon: '⭐' },
   { key: 'posts', label: '📝 Posts', icon: '📝' },
 ]
@@ -54,6 +55,7 @@ function Search() {
   const [medicationResults, setMedicationResults] = useState([])
   const [businessResults, setBusinessResults] = useState([])
   const [professionalResults, setProfessionalResults] = useState([])
+  const [peopleResults, setPeopleResults] = useState([])
   const [selectedSpecialty, setSelectedSpecialty] = useState('All Specialties')
   const [reviewResults, setReviewResults] = useState([])
   const [postResults, setPostResults] = useState([])
@@ -84,8 +86,7 @@ function Search() {
     if (category === 'all' || category === 'businesses') {
       let q = supabase
         .from('businesses')
-        .select('id, name, address, city, state, business_type, whatsapp')
-        .eq('visible_on_carefind', true)
+        .select('id, name, address, city, state, business_type, whatsapp, visible_on_carefind')
 
       if (query.trim()) q = q.ilike('name', `%${query}%`)
       if (stateFilter) q = q.eq('state', stateFilter)
@@ -122,6 +123,19 @@ function Search() {
       setProfessionalResults(data || [])
     } else setProfessionalResults([])
 
+    if (category === 'all' || category === 'people') {
+      if (query.trim()) {
+        let q = supabase
+          .from('profiles')
+          .select('id, full_name, display_name, avatar_url, bio, is_verified, specialty, location')
+          .or(`full_name.ilike.%${query}%,display_name.ilike.%${query}%`)
+          .limit(10)
+
+        const { data } = await q
+        setPeopleResults(data || [])
+      } else setPeopleResults([])
+    } else setPeopleResults([])
+
     if (category === 'all' || category === 'posts') {
       let q = supabase
         .from('posts')
@@ -149,7 +163,7 @@ function Search() {
     return `${Math.floor(diff / 86400)}d ago`
   }
 
-  const totalResults = medicationResults.length + businessResults.length + reviewResults.length + postResults.length
+  const totalResults = medicationResults.length + businessResults.length + professionalResults.length + peopleResults.length + reviewResults.length + postResults.length
   const hasResults = totalResults > 0
 
   return (
@@ -315,9 +329,16 @@ function Search() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
               {businessResults.map((biz) => (
                 <div key={biz.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <Link to={`/business/${biz.id}`} style={{ textDecoration: 'none' }}>
-                    <h3 style={{ margin: '0 0 4px 0', fontSize: 15, fontWeight: 800, color: theme.navy }}>{biz.name}</h3>
-                  </Link>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <Link to={`/business/${biz.id}`} style={{ textDecoration: 'none' }}>
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: theme.navy }}>{biz.name}</h3>
+                    </Link>
+                    {!biz.visible_on_carefind && (
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: theme.warning, background: '#fef3c7', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                        Unclaimed
+                      </span>
+                    )}
+                  </div>
                   <p style={{ margin: '0 0 4px 0', color: theme.textLight, fontSize: 12.5, textTransform: 'capitalize' }}>
                     {biz.business_type} · {biz.city}, {biz.state}
                   </p>
@@ -329,6 +350,42 @@ function Search() {
                     </a>
                   )}
                 </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* People */}
+        {peopleResults.length > 0 && (
+          <>
+            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
+              👥 People ({peopleResults.length})
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+              {peopleResults.map((p) => (
+                <Link key={p.id} to={`/u/${p.id}`} style={{ textDecoration: 'none' }}>
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <div style={{
+                      width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
+                      background: p.avatar_url ? `url(${p.avatar_url})` : 'linear-gradient(135deg, #14b8a6, #0f766e)',
+                      backgroundSize: 'cover', backgroundPosition: 'center',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 16, fontWeight: 800,
+                    }}>
+                      {!p.avatar_url && (p.full_name || p.display_name || '?')[0]?.toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{p.full_name || p.display_name || 'CareFind User'}</p>
+                        {p.is_verified && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 7px', borderRadius: 20, border: `1px solid ${theme.tealBright}` }}>✓ Verified</span>}
+                      </div>
+                      {p.display_name && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.textLight }}>@{p.display_name}</p>}
+                      {p.is_verified && p.specialty && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.tealDeep, fontWeight: 700 }}>{p.specialty}</p>}
+                      {p.location && <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>📍 {p.location}</p>}
+                    </div>
+                    <span style={{ color: theme.textLight, fontSize: 16 }}>›</span>
+                  </div>
+                </Link>
               ))}
             </div>
           </>
