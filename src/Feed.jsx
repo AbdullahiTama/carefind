@@ -859,39 +859,57 @@ function Feed() {
                 )}
               </div>
             )}
+            <style>{`
+              .eng-btn { background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 0; flex: 1; -webkit-tap-highlight-color: transparent; transition: transform 0.08s; }
+              .eng-btn:active { transform: scale(0.82); }
+              .eng-btn svg { transition: transform 0.08s; }
+              .eng-btn:active svg { transform: scale(0.88); }
+            `}</style>
             <div style={{
               borderTop: `1px solid ${theme.border}`, marginTop: 8,
               marginLeft: post.post_type === 'visual' ? 16 : 0, marginRight: post.post_type === 'visual' ? 16 : 0,
               marginBottom: post.post_type === 'visual' ? 16 : 0,
-              display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '4px 0',
+              display: 'flex', justifyContent: 'space-around', alignItems: 'center',
             }}>
               {/* Like */}
-              <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill={userHasLiked(post.id) ? theme.tealDeep : 'none'} stroke={userHasLiked(post.id) ? theme.tealDeep : '#555'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-btn" onPointerDown={() => {
+                toggleLike(post.id)
+                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 520; g.gain.setValueAtTime(0.08, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.08); o.start(); o.stop(a.currentTime + 0.08); } catch(e){}
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill={userHasLiked(post.id) ? theme.tealDeep : 'none'} stroke={userHasLiked(post.id) ? theme.tealDeep : '#666'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                 </svg>
-                <span style={{ fontSize: 11, color: userHasLiked(post.id) ? theme.tealDeep : '#777', fontWeight: 600 }}>{likeCount(post.id) || 'Like'}</span>
+                <span style={{ fontSize: 11, color: userHasLiked(post.id) ? theme.tealDeep : '#666', fontWeight: 700 }}>{likeCount(post.id) || 'Like'}</span>
               </button>
 
               {/* Comment */}
-              <button onClick={() => toggleComments(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-btn" onPointerDown={() => {
+                toggleComments(post.id)
+                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 420; g.gain.setValueAtTime(0.06, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.07); o.start(); o.stop(a.currentTime + 0.07); } catch(e){}
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
-                <span style={{ fontSize: 11, color: '#777', fontWeight: 600 }}>{comments[post.id] ? comments[post.id].length : 'Comment'}</span>
+                <span style={{ fontSize: 11, color: '#666', fontWeight: 700 }}>{comments[post.id]?.length || 'Comment'}</span>
               </button>
 
               {/* Save */}
-              <button onClick={() => toggleSave(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill={isSaved(post.id) ? theme.tealDeep : 'none'} stroke={isSaved(post.id) ? theme.tealDeep : '#555'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-btn" onPointerDown={() => {
+                toggleSave(post.id)
+                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 460; g.gain.setValueAtTime(0.06, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.07); o.start(); o.stop(a.currentTime + 0.07); } catch(e){}
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill={isSaved(post.id) ? theme.tealDeep : 'none'} stroke={isSaved(post.id) ? theme.tealDeep : '#666'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
                 </svg>
-                <span style={{ fontSize: 11, color: isSaved(post.id) ? theme.tealDeep : '#777', fontWeight: 600 }}>Save</span>
+                <span style={{ fontSize: 11, color: isSaved(post.id) ? theme.tealDeep : '#666', fontWeight: 700 }}>Save</span>
               </button>
 
               {/* Gift */}
-              <button onClick={() => user ? setGiftingPost({ postId: post.id, authorId: post.user_id }) : window.location.href = '/login'} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={theme.tealDeep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-btn" onPointerDown={() => {
+                user ? setGiftingPost({ postId: post.id, authorId: post.user_id }) : window.location.href = '/login'
+                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.type = 'sine'; o.frequency.value = 600; g.gain.setValueAtTime(0.07, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.1); o.start(); o.stop(a.currentTime + 0.1); } catch(e){}
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={theme.tealDeep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 12 20 22 4 22 4 12"/>
                   <rect x="2" y="7" width="20" height="5"/>
                   <line x1="12" y1="22" x2="12" y2="7"/>
@@ -902,13 +920,15 @@ function Feed() {
               </button>
 
               {/* Share */}
-              <button onClick={() => { if (navigator.share) { navigator.share({ title: 'CareFind', text: post.content, url: window.location.href }) } }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '10px 14px', minWidth: 44, minHeight: 44 }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-btn" onPointerDown={() => {
+                if (navigator.share) navigator.share({ title: 'CareFind', text: post.content, url: window.location.href })
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                   <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
                   <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                 </svg>
-                <span style={{ fontSize: 11, color: '#777', fontWeight: 600 }}>Share</span>
+                <span style={{ fontSize: 11, color: '#666', fontWeight: 700 }}>Share</span>
               </button>
             </div>
 
