@@ -15,6 +15,7 @@ import Dashboard from './Dashboard.jsx'
 import BusinessDashboard from './BusinessDashboard.jsx'
 import ProfessionalDashboard from './ProfessionalDashboard.jsx'
 import DrugProfile from './DrugProfile.jsx'
+import Wallet from './Wallet.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/business-dashboard" element={<BusinessDashboard />} />
           <Route path="/professional-dashboard" element={<ProfessionalDashboard />} />
           <Route path="/drug/:name" element={<DrugProfile />} />
+          <Route path="/wallet" element={<Wallet />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
