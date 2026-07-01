@@ -6,6 +6,7 @@ import BottomNav from './BottomNav.jsx'
 import { theme } from './lib/theme'
 import { wrapBold, wrapItalic, wrapHighlight, renderArticleHtml } from './lib/articleFormat'
 import GiftPanel from './GiftPanel.jsx'
+import VisualCard from './VisualCard.jsx'
 import { useRef } from 'react'
 
 function Feed() {
@@ -38,12 +39,22 @@ function Feed() {
   const [reviewSearching, setReviewSearching] = useState(false)
 
   const themes = {
-    teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
-    sunset: 'linear-gradient(135deg, #f97316, #db2777)',
-    ocean: 'linear-gradient(135deg, #0ea5e9, #1e3a8a)',
-    purple: 'linear-gradient(135deg, #7c3aed, #4c1d95)',
-    forest: 'linear-gradient(135deg, #16a34a, #14532d)',
+    teal: 'teal-depth',
+    sunset: 'navy-clinical',
+    ocean: 'midnight-teal',
+    purple: 'forest-wellness',
+    forest: 'slate-pulse',
   }
+
+  const themeLabels = {
+    'teal-depth': '💊 Pharmacy',
+    'navy-clinical': '🏥 Clinical',
+    'midnight-teal': '🩺 Medical',
+    'forest-wellness': '🌿 Wellness',
+    'slate-pulse': '❤️ Pulse',
+  }
+
+  const themeKeys = Object.keys(themeLabels)
 
   const postTypeLabels = {
     text: 'Text Post',
@@ -422,17 +433,21 @@ function Feed() {
           </div>
 
           {postType === 'visual' && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              {Object.keys(themes).map((t) => (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              {themeKeys.map((t) => (
                 <button
                   type="button"
                   key={t}
                   onClick={() => setVisualTheme(t)}
                   style={{
-                    width: 28, height: 28, borderRadius: '50%', background: themes[t],
-                    border: visualTheme === t ? '3px solid #333' : '1px solid #ccc', cursor: 'pointer',
+                    padding: '5px 10px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                    border: visualTheme === t ? `2px solid ${theme.tealDeep}` : `1px solid ${theme.border}`,
+                    background: visualTheme === t ? theme.tealDeep : theme.bg,
+                    color: visualTheme === t ? '#fff' : theme.textMid, cursor: 'pointer',
                   }}
-                />
+                >
+                  {themeLabels[t]}
+                </button>
               ))}
             </div>
           )}
@@ -531,15 +546,18 @@ function Feed() {
           )}
 
           {postType === 'visual' ? (
-            <div style={{ background: themes[visualTheme], borderRadius: 10, padding: 24, marginBottom: 8, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'relative', marginBottom: 8, borderRadius: 14, overflow: 'hidden' }}>
+              <VisualCard templateKey={visualTheme} content={content} preview={true} />
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Type your message..."
                 rows={3}
                 style={{
-                  width: '100%', background: 'transparent', border: 'none', color: '#fff', fontSize: 20, fontWeight: 700,
-                  textAlign: 'center', resize: 'none', fontFamily: 'inherit', outline: 'none',
+                  position: 'absolute', inset: 0, background: 'transparent', border: 'none',
+                  color: 'transparent', caretColor: '#fff', fontSize: 15, fontWeight: 800,
+                  padding: '38px 14px 14px', resize: 'none', fontFamily: 'inherit', outline: 'none',
+                  width: '100%', zIndex: 10,
                 }}
               />
             </div>
@@ -725,11 +743,7 @@ function Feed() {
             </div>
 
             {post.post_type === 'visual' ? (
-              <div style={{ background: themes[post.theme] || themes.teal, padding: 30, minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p style={{ color: '#fff', fontSize: 20, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                  {post.content}
-                </p>
-              </div>
+              <VisualCard templateKey={post.theme} content={post.content} />
             ) : (
               <>
                 {post.post_type === 'review' && post.rating && (
