@@ -113,7 +113,7 @@ function Feed() {
       const userIds = [...new Set((postData || []).map((p) => p.user_id))]
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, display_name, full_name, avatar_url, is_verified, verification_label, specialty')
+        .select('id, display_name, full_name, avatar_url, is_verified, verification_label, specialty, email')
         .in('id', userIds)
 
       const profileMap = {}
@@ -742,7 +742,7 @@ function Feed() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy }}>
-                      {profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || 'CareFind User'}
+                      {profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || (profiles[post.user_id]?.email?.split('@')[0]) || 'User'}
                     </span>
                     {profiles[post.user_id]?.is_verified && (
                       <span style={{
