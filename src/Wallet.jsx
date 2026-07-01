@@ -61,15 +61,16 @@ function Wallet() {
   }, [user, authLoading])
 
   function handleTopUp(pkg) {
-    if (!paystackReady || !window.PaystackPop) {
-      alert('Payment system loading, please try again in a moment.')
+    if (!window.PaystackPop) {
+      alert('Payment system not ready. Please refresh the page and try again.')
       return
     }
     if (paying) return
     setPaying(true)
+    console.log('Starting Paystack for', pkg.label, '- amount:', pkg.naira * 100)
 
     const handler = window.PaystackPop.setup({
-      key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+      key: 'pk_live_e900fe13bcce2afbf439e50b11197db8d2c949d9',
       email: user.email,
       amount: pkg.naira * 100,
       ref: `cf_${user.id.slice(0,8)}_${Date.now()}`,
