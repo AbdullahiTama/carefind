@@ -38,22 +38,13 @@ function Feed() {
   const [reviewSearchResults, setReviewSearchResults] = useState([])
   const [reviewSearching, setReviewSearching] = useState(false)
 
-  const themes = {
-    teal: 'teal-depth',
-    sunset: 'navy-clinical',
-    ocean: 'midnight-teal',
-    purple: 'forest-wellness',
-    forest: 'slate-pulse',
-  }
-
   const themeLabels = {
-    'teal-depth': '💊 Pharmacy',
-    'navy-clinical': '🏥 Clinical',
-    'midnight-teal': '🩺 Medical',
-    'forest-wellness': '🌿 Wellness',
+    'teal-depth': '🌊 Ocean',
+    'navy-clinical': '✨ Sky',
+    'midnight-teal': '🌃 Night',
+    'forest-wellness': '🌿 Forest',
     'slate-pulse': '❤️ Pulse',
   }
-
   const themeKeys = Object.keys(themeLabels)
 
   const postTypeLabels = {
@@ -546,20 +537,25 @@ function Feed() {
           )}
 
           {postType === 'visual' ? (
-            <div style={{ position: 'relative', marginBottom: 8, borderRadius: 14, overflow: 'hidden' }}>
-              <VisualCard templateKey={visualTheme} content={content} preview={true} />
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Type your message..."
-                rows={3}
-                style={{
-                  position: 'absolute', inset: 0, background: 'transparent', border: 'none',
-                  color: 'transparent', caretColor: '#fff', fontSize: 15, fontWeight: 800,
-                  padding: '38px 14px 14px', resize: 'none', fontFamily: 'inherit', outline: 'none',
-                  width: '100%', zIndex: 10,
-                }}
-              />
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden' }}>
+                <VisualCard templateKey={visualTheme} content={content} preview={true} />
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={3}
+                  style={{
+                    position: 'absolute', inset: 0, background: 'transparent', border: 'none',
+                    color: 'rgba(255,255,255,0)', caretColor: '#fff', fontSize: 15.5, fontWeight: 800,
+                    padding: '14px 16px 50px', resize: 'none', fontFamily: 'inherit', outline: 'none',
+                    width: '100%', zIndex: 10, lineHeight: 1.45,
+                  }}
+                />
+              </div>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6, textAlign: 'center' }}>
+                Tap the card and type — your text appears live on the card
+              </p>
             </div>
           ) : (
             <>
