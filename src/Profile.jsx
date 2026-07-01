@@ -26,9 +26,10 @@ function Profile() {
 
       if (data) {
         setProfile(data)
+        const emailBase = user.email?.split('@')[0] || ''
         setForm({
           full_name: data.full_name || '',
-          display_name: data.display_name || '',
+          display_name: data.display_name || emailBase,
           bio: data.bio || '',
           location: data.location || '',
           website: data.website || '',
@@ -101,20 +102,31 @@ function Profile() {
     setSaving(true)
     setError('')
 
-    const { error: updateError } = await supabase.from('profiles').update({
-      full_name: form.full_name.trim(),
-      display_name: form.display_name.trim(),
-      bio: form.bio.trim(),
-      location: form.location.trim(),
-      website: form.website.trim(),
-    }).eq('id', user.id)
+    try {
+      const updates = {
+        full_name: form.full_name.trim() || null,
+        display_name: form.display_name.trim() || null,
+        bio: form.bio.trim() || null,
+        location: form.location.trim() || null,
+        website: form.website.trim() || null,
+      }
 
-    if (updateError) {
-      setError('Username may already be taken.')
-    } else {
-      setProfile((prev) => ({ ...prev, ...form }))
-      setEditing(false)
-      setIsNewUser(false)
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+
+      if (updateError) {
+        console.error('Profile update error:', updateError)
+        setError('Something went wrong saving your profile. Please try again.')
+      } else {
+        setProfile((prev) => ({ ...prev, ...updates }))
+        setForm((prev) => ({ ...prev, ...updates }))
+        setEditing(false)
+        setIsNewUser(false)
+      }
+    } catch (err) {
+      setError('Network error. Please check your connection.')
     }
     setSaving(false)
   }
@@ -136,7 +148,8 @@ function Profile() {
     )
   }
 
-  const displayName = profile?.full_name || profile?.display_name || user.email?.split('@')[0]
+  const emailPrefix = user.email?.split('@')[0] || ''
+  const displayName = profile?.full_name || profile?.display_name || emailPrefix
   const username = profile?.display_name
 
   return (
