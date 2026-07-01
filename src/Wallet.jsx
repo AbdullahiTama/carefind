@@ -38,7 +38,16 @@ function Wallet() {
 
         if (!existing) {
           const newCoins = parseInt(coins)
-          const newBalance = (wallet?.balance || 0) + newCoins
+
+          // Get fresh wallet balance from DB
+          const { data: freshWallet } = await supabase
+            .from('wallets')
+            .select('balance')
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+          const currentBalance = freshWallet?.balance || 0
+          const newBalance = currentBalance + newCoins
 
           await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', user.id)
           await supabase.from('transactions').insert({
@@ -46,17 +55,25 @@ function Wallet() {
             naira_amount: parseInt(naira) * 100, reference: ref, status: 'success',
           })
 
-          setWallet((prev) => ({ ...prev, balance: newBalance }))
-          setTab('history')
-          alert(`✅ ${newCoins} CareCoins added to your wallet!`)
+          // Reload wallet and transactions
+          setWallet((prev) => ({ ...(prev || {}), balance: newBalance }))
 
-          // Clean URL
+          const { data: txData } = await supabase
+            .from('transactions').select('*').eq('user_id', user.id)
+            .order('created_at', { ascending: false }).limit(20)
+          setTransactions(txData || [])
+
+          setTab('history')
+          window.history.replaceState({}, '', '/wallet')
+          alert(`✅ ${newCoins} CareCoin${newCoins > 1 ? 's' : ''} added! New balance: ${newBalance} coins`)
+        } else {
+          // Already processed — just clean the URL
           window.history.replaceState({}, '', '/wallet')
         }
       }
     }
-    if (!authLoading && user && wallet) handlePaystackReturn()
-  }, [searchParams, user, authLoading, wallet])
+    if (!authLoading && user) handlePaystackReturn()
+  }, [searchParams, user, authLoading])
 
   useEffect(() => {
     async function load() {
