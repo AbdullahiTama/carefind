@@ -16,11 +16,31 @@ const CATEGORIES = [
   { key: 'all', label: '🔍 All', icon: '🔍' },
   { key: 'medications', label: '💊 Medications', icon: '💊' },
   { key: 'businesses', label: '🏥 Businesses', icon: '🏥' },
+  { key: 'professionals', label: '🩺 Professionals', icon: '🩺' },
   { key: 'reviews', label: '⭐ Reviews', icon: '⭐' },
   { key: 'posts', label: '📝 Posts', icon: '📝' },
 ]
 
 const BUSINESS_TYPES = ['All Types', 'pharmacy', 'hospital', 'dental', 'optical', 'wellness', 'skincare']
+
+const SPECIALTIES = [
+  'All Specialties',
+  'Pharmacist',
+  'Medical Doctor',
+  'Cardiologist',
+  'Surgeon',
+  'Pediatrician',
+  'Dentist',
+  'Optometrist',
+  'Nurse',
+  'Dermatologist',
+  'Gynaecologist',
+  'Psychiatrist',
+  'Physiotherapist',
+  'Radiologist',
+  'Nutritionist / Dietitian',
+  'Other Healthcare Professional',
+]
 
 function Search() {
   const [query, setQuery] = useState('')
@@ -33,6 +53,8 @@ function Search() {
 
   const [medicationResults, setMedicationResults] = useState([])
   const [businessResults, setBusinessResults] = useState([])
+  const [professionalResults, setProfessionalResults] = useState([])
+  const [selectedSpecialty, setSelectedSpecialty] = useState('All Specialties')
   const [reviewResults, setReviewResults] = useState([])
   const [postResults, setPostResults] = useState([])
 
@@ -84,6 +106,21 @@ function Search() {
       const { data } = await q.order('created_at', { ascending: false }).limit(8)
       setReviewResults(data || [])
     } else setReviewResults([])
+
+    if (category === 'all' || category === 'professionals') {
+      let q = supabase
+        .from('profiles')
+        .select('id, full_name, display_name, avatar_url, bio, specialty, verification_label, location')
+        .eq('is_verified', true)
+
+      if (query.trim()) {
+        q = q.or(`full_name.ilike.%${query}%,display_name.ilike.%${query}%,specialty.ilike.%${query}%,bio.ilike.%${query}%`)
+      }
+      if (selectedSpecialty !== 'All Specialties') q = q.eq('specialty', selectedSpecialty)
+
+      const { data } = await q.limit(10)
+      setProfessionalResults(data || [])
+    } else setProfessionalResults([])
 
     if (category === 'all' || category === 'posts') {
       let q = supabase
@@ -185,6 +222,18 @@ function Search() {
                 </div>
               </div>
             )}
+            {(category === 'all' || category === 'professionals') && (
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Specialty</p>
+                <select
+                  value={selectedSpecialty}
+                  onChange={(e) => setSelectedSpecialty(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 10, border: 'none', fontSize: 13, background: 'rgba(255,255,255,0.12)', color: '#fff' }}
+                >
+                  {SPECIALTIES.map((s) => <option key={s} value={s} style={{ color: '#000' }}>{s}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -280,6 +329,42 @@ function Search() {
                     </a>
                   )}
                 </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Professionals */}
+        {professionalResults.length > 0 && (
+          <>
+            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
+              🩺 Professionals ({professionalResults.length})
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+              {professionalResults.map((p) => (
+                <Link key={p.id} to={`/u/${p.id}`} style={{ textDecoration: 'none' }}>
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <div style={{
+                      width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
+                      background: p.avatar_url ? `url(${p.avatar_url})` : 'linear-gradient(135deg, #14b8a6, #0f766e)',
+                      backgroundSize: 'cover', backgroundPosition: 'center',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 16, fontWeight: 800,
+                    }}>
+                      {!p.avatar_url && (p.full_name || p.display_name || '?')[0]?.toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{p.full_name || p.display_name || 'Professional'}</p>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 7px', borderRadius: 20, border: `1px solid ${theme.tealBright}` }}>✓ Verified</span>
+                      </div>
+                      <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.tealDeep, fontWeight: 700 }}>{p.specialty || p.verification_label}</p>
+                      {p.location && <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>📍 {p.location}</p>}
+                      {p.bio && <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: theme.textMid, lineHeight: 1.4 }}>{p.bio.slice(0, 80)}{p.bio.length > 80 ? '...' : ''}</p>}
+                    </div>
+                    <span style={{ color: theme.textLight, fontSize: 16 }}>›</span>
+                  </div>
+                </Link>
               ))}
             </div>
           </>
