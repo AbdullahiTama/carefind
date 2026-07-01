@@ -19,6 +19,9 @@ function Feed() {
   const [reportedPosts, setReportedPosts] = useState([])
   const [reportingId, setReportingId] = useState(null)
   const [giftingPost, setGiftingPost] = useState(null) // { postId, authorId }
+  const [editingPost, setEditingPost] = useState(null) // { id, content }
+  const [editingComment, setEditingComment] = useState(null) // { id, content, post_id }
+  const [deletingId, setDeletingId] = useState(null)
   const [comments, setComments] = useState({})
   const [openComments, setOpenComments] = useState({})
   const [commentDrafts, setCommentDrafts] = useState({})
@@ -244,16 +247,51 @@ function Feed() {
     return reactions.some((r) => r.post_id === postId && r.user_id === user.id)
   }
 
+  async function handleEditPost(postId, newContent) {
+    if (!newContent.trim()) return
+    await supabase.from('posts').update({ content: newContent.trim() }).eq('id', postId).eq('user_id', user.id)
+    setEditingPost(null)
+    loadFeed()
+  }
+
+  async function handleDeletePost(postId) {
+    if (!window.confirm('Delete this post? This cannot be undone.')) return
+    setDeletingId(postId)
+    await supabase.from('posts').delete().eq('id', postId).eq('user_id', user.id)
+    loadFeed()
+    setDeletingId(null)
+  }
+
+  async function handleEditComment(commentId, postId, newContent) {
+    if (!newContent.trim()) return
+    await supabase.from('post_comments').update({ content: newContent.trim() }).eq('id', commentId).eq('user_id', user.id)
+    setEditingComment(null)
+    const { data } = await supabase
+      .from('post_comments')
+      .select('id, content, created_at, user_id, profiles(id, display_name, full_name, avatar_url, is_verified, specialty)')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+    setComments((prev) => ({ ...prev, [postId]: data || [] }))
+  }
+
+  async function handleDeleteComment(commentId, postId) {
+    await supabase.from('post_comments').delete().eq('id', commentId).eq('user_id', user.id)
+    setComments((prev) => ({ ...prev, [postId]: (prev[postId] || []).filter((c) => c.id !== commentId) }))
+  }
+
   async function toggleLike(postId) {
     if (!user) return
     const existing = reactions.find((r) => r.post_id === postId && r.user_id === user.id)
 
+    // Optimistic update — instant UI response
     if (existing) {
-      await supabase.from('post_reactions').delete().eq('id', existing.id)
+      setReactions((prev) => prev.filter((r) => r.id !== existing.id))
+      supabase.from('post_reactions').delete().eq('id', existing.id)
     } else {
-      await supabase.from('post_reactions').insert({ post_id: postId, user_id: user.id, reaction_type: 'like' })
+      const tempReaction = { id: `temp_${Date.now()}`, post_id: postId, user_id: user.id, reaction_type: 'like' }
+      setReactions((prev) => [...prev, tempReaction])
+      supabase.from('post_reactions').insert({ post_id: postId, user_id: user.id, reaction_type: 'like' })
     }
-    loadFeed()
   }
 
   async function toggleComments(postId) {
@@ -338,11 +376,13 @@ function Feed() {
     const existing = savedPosts.find((s) => s.post_id === postId)
 
     if (existing) {
-      await supabase.from('saved_posts').delete().eq('id', existing.id)
+      setSavedPosts((prev) => prev.filter((s) => s.post_id !== postId))
+      supabase.from('saved_posts').delete().eq('id', existing.id)
     } else {
-      await supabase.from('saved_posts').insert({ user_id: user.id, post_id: postId })
+      const temp = { id: `temp_${Date.now()}`, post_id: postId, user_id: user.id }
+      setSavedPosts((prev) => [...prev, temp])
+      supabase.from('saved_posts').insert({ user_id: user.id, post_id: postId })
     }
-    loadFeed()
   }
 
   function timeAgo(dateStr) {
@@ -740,8 +780,41 @@ function Feed() {
                     {isFollowing(post.user_id) ? 'Following' : 'Follow'}
                   </button>
                 )}
+                {user && post.user_id === user.id && (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      onClick={() => setEditingPost({ id: post.id, content: post.content })}
+                      style={{ background: 'none', border: 'none', fontSize: 12, color: theme.textLight, cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => handleDeletePost(post.id)}
+                      disabled={deletingId === post.id}
+                      style={{ background: 'none', border: 'none', fontSize: 12, color: theme.alert, cursor: 'pointer', padding: '2px 6px' }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Edit post mode */}
+            {editingPost?.id === post.id && (
+              <div style={{ margin: '8px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <textarea
+                  value={editingPost.content}
+                  onChange={(e) => setEditingPost({ ...editingPost, content: e.target.value })}
+                  rows={3}
+                  style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.tealDeep}`, borderRadius: 12, fontFamily: 'inherit' }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => handleEditPost(post.id, editingPost.content)} style={{ flex: 1, padding: '8px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>Save</button>
+                  <button onClick={() => setEditingPost(null)} style={{ flex: 1, padding: '8px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 13 }}>Cancel</button>
+                </div>
+              </div>
+            )}
 
             {post.post_type === 'visual' ? (
               <VisualCard templateKey={post.theme} content={post.content} />
@@ -766,13 +839,25 @@ function Feed() {
                 )}
               </>
             )}
-            {likeCount(post.id) > 0 && (
-              <p style={{
-                margin: 0, padding: post.post_type === 'visual' ? '8px 16px 0 16px' : '2px 0 0 0',
-                fontSize: 11.5, color: theme.textLight, fontWeight: 600,
+            {(likeCount(post.id) > 0 || (comments[post.id] && comments[post.id].length > 0)) && (
+              <div style={{
+                padding: post.post_type === 'visual' ? '6px 16px 0 16px' : '4px 0 0 0',
+                display: 'flex', gap: 12, alignItems: 'center',
               }}>
-                ❤️ {likeCount(post.id)} {likeCount(post.id) === 1 ? 'like' : 'likes'}
-              </p>
+                {likeCount(post.id) > 0 && (
+                  <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>
+                    ❤️ {likeCount(post.id)} {likeCount(post.id) === 1 ? 'like' : 'likes'}
+                  </span>
+                )}
+                {comments[post.id] && comments[post.id].length > 0 && (
+                  <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>
+                    💬 {comments[post.id].length} {comments[post.id].length === 1 ? 'comment' : 'comments'}
+                  </span>
+                )}
+                {isSaved(post.id) && (
+                  <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>🔖 Saved</span>
+                )}
+              </div>
             )}
             <div style={{
               borderTop: `1px solid ${theme.border}`, marginTop: 8,
@@ -828,30 +913,84 @@ function Feed() {
             </div>
 
             {openComments[post.id] && (
-              <div style={{ paddingTop: 10, borderTop: '1px solid #f0f0f0', paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
+              <div style={{ paddingTop: 10, borderTop: `1px solid ${theme.border}`, paddingLeft: post.post_type === 'visual' ? 14 : 0, paddingRight: post.post_type === 'visual' ? 14 : 0, paddingBottom: post.post_type === 'visual' ? 14 : 0 }}>
                 {(comments[post.id] || []).map((c) => (
-                  <p key={c.id} style={{ margin: '0 0 6px 0', fontSize: 13, color: '#333' }}>{c.content}</p>
+                  <div key={c.id} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'flex-start' }}>
+                    <Link to={`/u/${c.user_id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: c.profiles?.avatar_url ? `url(${c.profiles.avatar_url})` : theme.tealGradient,
+                        backgroundSize: 'cover', backgroundPosition: 'center',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: 11, fontWeight: 800,
+                      }}>
+                        {!c.profiles?.avatar_url && (c.profiles?.full_name || c.profiles?.display_name || '?')[0]?.toUpperCase()}
+                      </div>
+                    </Link>
+                    <div style={{ flex: 1, background: theme.bg, borderRadius: 12, padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Link to={`/u/${c.user_id}`} style={{ textDecoration: 'none' }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: theme.navy }}>
+                              {c.profiles?.full_name || c.profiles?.display_name || 'CareFind User'}
+                            </span>
+                          </Link>
+                          {c.profiles?.is_verified && (
+                            <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep }}>
+                              ✓ {c.profiles?.specialty || ''}
+                            </span>
+                          )}
+                        </div>
+                        {user && c.user_id === user.id && (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => setEditingComment({ id: c.id, content: c.content, post_id: post.id })} style={{ background: 'none', border: 'none', fontSize: 11, cursor: 'pointer', color: theme.textLight }}>✏️</button>
+                            <button onClick={() => handleDeleteComment(c.id, post.id)} style={{ background: 'none', border: 'none', fontSize: 11, cursor: 'pointer', color: theme.alert }}>🗑️</button>
+                          </div>
+                        )}
+                      </div>
+                      {editingComment?.id === c.id ? (
+                        <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
+                          <input
+                            value={editingComment.content}
+                            onChange={(e) => setEditingComment({ ...editingComment, content: e.target.value })}
+                            style={{ flex: 1, padding: '5px 8px', fontSize: 12, border: `1px solid ${theme.tealDeep}`, borderRadius: 8 }}
+                          />
+                          <button onClick={() => handleEditComment(c.id, post.id, editingComment.content)} style={{ padding: '5px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>Save</button>
+                          <button onClick={() => setEditingComment(null)} style={{ padding: '5px 8px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 11 }}>✕</button>
+                        </div>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: 13, color: theme.textMid, lineHeight: 1.4 }}>{c.content}</p>
+                      )}
+                    </div>
+                  </div>
                 ))}
 
                 {user ? (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%', background: theme.tealGradient,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 800, flexShrink: 0,
+                    }}>
+                      {user.email?.[0]?.toUpperCase()}
+                    </div>
                     <input
                       type="text"
                       value={commentDrafts[post.id] || ''}
                       onChange={(e) => setCommentDrafts({ ...commentDrafts, [post.id]: e.target.value })}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
                       placeholder="Add a comment..."
-                      style={{ flex: 1, padding: 8, fontSize: 13, border: '1px solid #ccc', borderRadius: 8 }}
+                      style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 20, outline: 'none' }}
                     />
                     <button
                       onClick={() => handleAddComment(post.id)}
-                      style={{ padding: '8px 12px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13 }}
+                      style={{ padding: '7px 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 20, fontSize: 12, fontWeight: 700 }}
                     >
-                      Send
+                      Post
                     </button>
                   </div>
                 ) : (
-                  <p style={{ fontSize: 13, color: '#999' }}>
-                    <Link to="/login" style={{ color: '#0f766e' }}>Log in</Link> to comment.
+                  <p style={{ fontSize: 13, color: theme.textLight }}>
+                    <Link to="/login" style={{ color: theme.tealDeep, fontWeight: 700 }}>Log in</Link> to comment.
                   </p>
                 )}
               </div>
