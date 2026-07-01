@@ -808,7 +808,7 @@ function Feed() {
                 >
                   <span style={{ fontSize: 14 }}>{isSaved(post.id) ? '🔖' : '📑'}</span> Save
                 </button>
-                {user && post.user_id !== user.id && (
+                {user && (
                   <button
                     onClick={() => setGiftingPost({ postId: post.id, authorId: post.user_id })}
                     style={{
