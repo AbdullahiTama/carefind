@@ -12,6 +12,13 @@ function BusinessDashboard() {
   const [products, setProducts] = useState([])
   const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
+  const [csvUploading, setCsvUploading] = useState(false)
+  const [csvResult, setCsvResult] = useState(null)
+  const [showCsvUpload, setShowCsvUpload] = useState(false)
+  const [editingProduct, setEditingProduct] = useState(null)
+  const [editPrice, setEditPrice] = useState('')
+  const [editStock, setEditStock] = useState('')
+  const [savingProduct, setSavingProduct] = useState(false)
 
   async function loadBusinesses() {
     if (!user) return
@@ -75,7 +82,105 @@ function BusinessDashboard() {
   if (authLoading || loading) return <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif' }}>Loading...</div>
 
   if (!user) {
-    return (
+    async function saveProduct(productId) {
+    setSavingProduct(true)
+    await supabase.from('products').update({
+      price: parseInt(editPrice),
+      stock: parseInt(editStock),
+    }).eq('id', productId)
+    setEditingProduct(null)
+    await loadBusinessData(selectedId)
+    setSavingProduct(false)
+  }
+
+  async function toggleProductVisibility(productId, currentVal) {
+    await supabase.from('products').update({ list_on_carefind: !currentVal }).eq('id', productId)
+    await loadBusinessData(selectedId)
+  }
+
+  function downloadTemplate() {
+    const template = [
+      'name,generic_name,price,stock,category,emoji',
+      'Paracetamol 500mg,Acetaminophen,150,100,analgesic,💊',
+      'Amoxicillin 250mg,Amoxicillin,450,50,antibiotic,💊',
+      'Vitamin C 1000mg,Ascorbic Acid,800,200,supplement,🍊',
+    ].join('\n')
+    const blob = new Blob([template], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'carefind_stock_template.csv'
+    a.click()
+  }
+
+  async function handleCSVUpload(e) {
+    const file = e.target.files[0]
+    if (!file || !selectedId) return
+    setCsvUploading(true)
+    setCsvResult(null)
+
+    const text = await file.text()
+    const lines = text.trim().split('\n')
+    const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''))
+
+    const nameIdx = headers.indexOf('name')
+    const genericIdx = headers.indexOf('generic_name')
+    const priceIdx = headers.indexOf('price')
+    const stockIdx = headers.indexOf('stock')
+    const categoryIdx = headers.indexOf('category')
+    const emojiIdx = headers.indexOf('emoji')
+
+    if (nameIdx === -1 || priceIdx === -1 || stockIdx === -1) {
+      setCsvResult({ error: 'CSV must have columns: name, price, stock' })
+      setCsvUploading(false)
+      return
+    }
+
+    const rows = lines.slice(1).filter(l => l.trim())
+    let added = 0; let updated = 0; let errors = 0
+
+    for (const row of rows) {
+      try {
+        const cols = row.split(',').map(c => c.trim().replace(/"/g, ''))
+        const name = cols[nameIdx]
+        const price = parseInt(cols[priceIdx]) || 0
+        const stock = parseInt(cols[stockIdx]) || 0
+        if (!name || price <= 0) { errors++; continue }
+
+        // Check if product exists
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id')
+          .eq('business_id', selectedId)
+          .ilike('name', name)
+          .maybeSingle()
+
+        const productData = {
+          name,
+          price,
+          stock,
+          business_id: selectedId,
+          list_on_carefind: true,
+          generic_name: genericIdx >= 0 ? cols[genericIdx] : null,
+          category: categoryIdx >= 0 ? cols[categoryIdx] : null,
+          emoji: emojiIdx >= 0 ? cols[emojiIdx] : '💊',
+        }
+
+        if (existing) {
+          await supabase.from('products').update({ price, stock, list_on_carefind: true }).eq('id', existing.id)
+          updated++
+        } else {
+          await supabase.from('products').insert(productData)
+          added++
+        }
+      } catch { errors++ }
+    }
+
+    setCsvResult({ added, updated, errors, total: rows.length })
+    await loadBusinessData(selectedId)
+    setCsvUploading(false)
+  }
+
+  return (
       <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif', maxWidth: 420, margin: '0 auto', textAlign: 'center' }}>
         <p style={{ color: theme.textMid }}>Log in to manage your business.</p>
         <Link to="/login" style={{ color: theme.tealDeep, fontWeight: 700 }}>Log In</Link>
@@ -84,7 +189,105 @@ function BusinessDashboard() {
   }
 
   if (businesses.length === 0) {
-    return (
+    async function saveProduct(productId) {
+    setSavingProduct(true)
+    await supabase.from('products').update({
+      price: parseInt(editPrice),
+      stock: parseInt(editStock),
+    }).eq('id', productId)
+    setEditingProduct(null)
+    await loadBusinessData(selectedId)
+    setSavingProduct(false)
+  }
+
+  async function toggleProductVisibility(productId, currentVal) {
+    await supabase.from('products').update({ list_on_carefind: !currentVal }).eq('id', productId)
+    await loadBusinessData(selectedId)
+  }
+
+  function downloadTemplate() {
+    const template = [
+      'name,generic_name,price,stock,category,emoji',
+      'Paracetamol 500mg,Acetaminophen,150,100,analgesic,💊',
+      'Amoxicillin 250mg,Amoxicillin,450,50,antibiotic,💊',
+      'Vitamin C 1000mg,Ascorbic Acid,800,200,supplement,🍊',
+    ].join('\n')
+    const blob = new Blob([template], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'carefind_stock_template.csv'
+    a.click()
+  }
+
+  async function handleCSVUpload(e) {
+    const file = e.target.files[0]
+    if (!file || !selectedId) return
+    setCsvUploading(true)
+    setCsvResult(null)
+
+    const text = await file.text()
+    const lines = text.trim().split('\n')
+    const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''))
+
+    const nameIdx = headers.indexOf('name')
+    const genericIdx = headers.indexOf('generic_name')
+    const priceIdx = headers.indexOf('price')
+    const stockIdx = headers.indexOf('stock')
+    const categoryIdx = headers.indexOf('category')
+    const emojiIdx = headers.indexOf('emoji')
+
+    if (nameIdx === -1 || priceIdx === -1 || stockIdx === -1) {
+      setCsvResult({ error: 'CSV must have columns: name, price, stock' })
+      setCsvUploading(false)
+      return
+    }
+
+    const rows = lines.slice(1).filter(l => l.trim())
+    let added = 0; let updated = 0; let errors = 0
+
+    for (const row of rows) {
+      try {
+        const cols = row.split(',').map(c => c.trim().replace(/"/g, ''))
+        const name = cols[nameIdx]
+        const price = parseInt(cols[priceIdx]) || 0
+        const stock = parseInt(cols[stockIdx]) || 0
+        if (!name || price <= 0) { errors++; continue }
+
+        // Check if product exists
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id')
+          .eq('business_id', selectedId)
+          .ilike('name', name)
+          .maybeSingle()
+
+        const productData = {
+          name,
+          price,
+          stock,
+          business_id: selectedId,
+          list_on_carefind: true,
+          generic_name: genericIdx >= 0 ? cols[genericIdx] : null,
+          category: categoryIdx >= 0 ? cols[categoryIdx] : null,
+          emoji: emojiIdx >= 0 ? cols[emojiIdx] : '💊',
+        }
+
+        if (existing) {
+          await supabase.from('products').update({ price, stock, list_on_carefind: true }).eq('id', existing.id)
+          updated++
+        } else {
+          await supabase.from('products').insert(productData)
+          added++
+        }
+      } catch { errors++ }
+    }
+
+    setCsvResult({ added, updated, errors, total: rows.length })
+    await loadBusinessData(selectedId)
+    setCsvUploading(false)
+  }
+
+  return (
       <div style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 420, margin: '0 auto', paddingBottom: 90 }}>
         <div style={{ background: theme.heroGradient, padding: '22px 20px 26px 20px', borderRadius: '0 0 28px 28px', color: '#fff' }}>
           <Link to="/profile" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Profile</Link>
@@ -111,6 +314,104 @@ function BusinessDashboard() {
         <BottomNav />
       </div>
     )
+  }
+
+  async function saveProduct(productId) {
+    setSavingProduct(true)
+    await supabase.from('products').update({
+      price: parseInt(editPrice),
+      stock: parseInt(editStock),
+    }).eq('id', productId)
+    setEditingProduct(null)
+    await loadBusinessData(selectedId)
+    setSavingProduct(false)
+  }
+
+  async function toggleProductVisibility(productId, currentVal) {
+    await supabase.from('products').update({ list_on_carefind: !currentVal }).eq('id', productId)
+    await loadBusinessData(selectedId)
+  }
+
+  function downloadTemplate() {
+    const template = [
+      'name,generic_name,price,stock,category,emoji',
+      'Paracetamol 500mg,Acetaminophen,150,100,analgesic,💊',
+      'Amoxicillin 250mg,Amoxicillin,450,50,antibiotic,💊',
+      'Vitamin C 1000mg,Ascorbic Acid,800,200,supplement,🍊',
+    ].join('\n')
+    const blob = new Blob([template], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'carefind_stock_template.csv'
+    a.click()
+  }
+
+  async function handleCSVUpload(e) {
+    const file = e.target.files[0]
+    if (!file || !selectedId) return
+    setCsvUploading(true)
+    setCsvResult(null)
+
+    const text = await file.text()
+    const lines = text.trim().split('\n')
+    const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''))
+
+    const nameIdx = headers.indexOf('name')
+    const genericIdx = headers.indexOf('generic_name')
+    const priceIdx = headers.indexOf('price')
+    const stockIdx = headers.indexOf('stock')
+    const categoryIdx = headers.indexOf('category')
+    const emojiIdx = headers.indexOf('emoji')
+
+    if (nameIdx === -1 || priceIdx === -1 || stockIdx === -1) {
+      setCsvResult({ error: 'CSV must have columns: name, price, stock' })
+      setCsvUploading(false)
+      return
+    }
+
+    const rows = lines.slice(1).filter(l => l.trim())
+    let added = 0; let updated = 0; let errors = 0
+
+    for (const row of rows) {
+      try {
+        const cols = row.split(',').map(c => c.trim().replace(/"/g, ''))
+        const name = cols[nameIdx]
+        const price = parseInt(cols[priceIdx]) || 0
+        const stock = parseInt(cols[stockIdx]) || 0
+        if (!name || price <= 0) { errors++; continue }
+
+        // Check if product exists
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id')
+          .eq('business_id', selectedId)
+          .ilike('name', name)
+          .maybeSingle()
+
+        const productData = {
+          name,
+          price,
+          stock,
+          business_id: selectedId,
+          list_on_carefind: true,
+          generic_name: genericIdx >= 0 ? cols[genericIdx] : null,
+          category: categoryIdx >= 0 ? cols[categoryIdx] : null,
+          emoji: emojiIdx >= 0 ? cols[emojiIdx] : '💊',
+        }
+
+        if (existing) {
+          await supabase.from('products').update({ price, stock, list_on_carefind: true }).eq('id', existing.id)
+          updated++
+        } else {
+          await supabase.from('products').insert(productData)
+          added++
+        }
+      } catch { errors++ }
+    }
+
+    setCsvResult({ added, updated, errors, total: rows.length })
+    await loadBusinessData(selectedId)
+    setCsvUploading(false)
   }
 
   return (
