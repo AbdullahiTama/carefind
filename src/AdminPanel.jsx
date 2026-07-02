@@ -50,6 +50,10 @@ export default function AdminPanel() {
   const [verifySpecialty, setVerifySpecialty] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [notifCount, setNotifCount] = useState(0)
+  const [roleNotifCount, setRoleNotifCount] = useState(0)
+  const [withdrawals, setWithdrawals] = useState([])
+  const [notifications, setNotifications] = useState([])
 
   useEffect(() => {
     try {
@@ -67,10 +71,16 @@ export default function AdminPanel() {
       setAdminUser(JSON.parse(userData))
       loadAll()
     } catch { navigate('/admin') }
+
+    // Auto-refresh notifications every 30 seconds
+    const interval = setInterval(() => {
+      loadAll()
+    }, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   async function loadAll() {
-    const [usersRes, verifRes, claimsRes, reportsRes, postsRes, txRes, tasksRes, teamsRes, staffRes] = await Promise.all([
+    const [usersRes, verifRes, claimsRes, reportsRes, postsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes] = await Promise.all([
       supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
@@ -80,6 +90,9 @@ export default function AdminPanel() {
       supabase.from('tasks').select('*').order('created_at', { ascending: false }),
       supabase.from('admin_teams').select('*').order('created_at'),
       supabase.from('admin_users').select('*').order('created_at'),
+      supabase.from('withdrawal_requests').select('*, profiles(full_name, display_name)').order('created_at', { ascending: false }),
+      supabase.from('task_submissions').select('*, tasks(title), profiles(full_name, display_name)').order('created_at', { ascending: false }).limit(20),
+      supabase.from('consultations').select('*, profiles!consultations_patient_id_fkey(full_name, display_name)').eq('status', 'paid').order('created_at', { ascending: false }).limit(20),
     ])
     setUsers(usersRes.data || [])
     setVerifications(verifRes.data || [])
@@ -90,16 +103,51 @@ export default function AdminPanel() {
     setTasks(tasksRes.data || [])
     setTeams(teamsRes.data || [])
     setStaff(staffRes.data || [])
+    setWithdrawals(withdrawRes.data || [])
+
+    // Build notification feed
+    const allNotifs = [
+      ...(verifRes.data || []).filter(v => v.status === 'pending').map(v => ({ id: v.id, type: 'verification', icon: '🩺', title: `Verification request from ${v.full_name}`, subtitle: v.profession, time: v.created_at, severity: 'warning', tab: 'verifications', role: 'verification_officer' })),
+      ...(claimsRes.data || []).filter(c => c.status === 'pending').map(c => ({ id: c.id, type: 'claim', icon: '🏥', title: `Business claim: ${c.businesses?.name}`, subtitle: 'Pending approval', time: c.created_at, severity: 'warning', tab: 'claims', role: 'business_manager' })),
+      ...(reportsRes.data || []).filter(r => r.status === 'pending').map(r => ({ id: r.id, type: 'report', icon: '🚩', title: `Post reported: ${r.reason}`, subtitle: r.posts?.content?.slice(0, 60), time: r.created_at, severity: 'urgent', tab: 'reports', role: 'moderator' })),
+      ...(withdrawRes.data || []).filter(w => w.status === 'pending').map(w => ({ id: w.id, type: 'withdrawal', icon: '💰', title: `Withdrawal request: ₦${(w.amount * 200).toLocaleString()}`, subtitle: w.profiles?.full_name || 'User', time: w.created_at, severity: 'warning', tab: 'withdrawals', role: 'super_admin' })),
+      ...(taskSubRes.data || []).filter(s => s.status === 'pending').map(s => ({ id: s.id, type: 'task', icon: '📋', title: `Task submission: ${s.tasks?.title}`, subtitle: s.profiles?.full_name || 'Professional', time: s.created_at, severity: 'info', tab: 'tasks', role: 'super_admin' })),
+      ...(consultRes.data || []).map(c => ({ id: c.id, type: 'consultation', icon: '📅', title: 'New consultation booking', subtitle: c.profiles?.full_name || 'Patient', time: c.created_at, severity: 'info', tab: 'overview', role: 'verification_officer' })),
+    ].sort((a, b) => new Date(b.time) - new Date(a.time))
+
+    setNotifications(allNotifs)
     const rev = (txRes.data || []).filter(t => t.type === 'topup').reduce((s, t) => s + (t.naira_amount || 0), 0)
+    const pendingVerifs = (verifRes.data || []).filter(v => v.status === 'pending').length
+    const pendingClaims = (claimsRes.data || []).filter(c => c.status === 'pending').length
+    const openReports = (reportsRes.data || []).filter(r => r.status === 'pending').length
+
     setStats({
       users: usersRes.data?.length || 0,
       posts: postsRes.data?.length || 0,
-      pendingVerifs: (verifRes.data || []).filter(v => v.status === 'pending').length,
-      pendingClaims: (claimsRes.data || []).filter(c => c.status === 'pending').length,
-      reports: (reportsRes.data || []).filter(r => r.status === 'pending').length,
+      pendingVerifs,
+      pendingClaims,
+      reports: openReports,
       revenue: rev / 100,
       transactions: txRes.data?.length || 0,
     })
+
+    const pendingWithdrawals = (withdrawRes.data || []).filter(w => w.status === 'pending').length
+    const pendingTaskSubs = (taskSubRes.data || []).filter(s => s.status === 'pending').length
+    const newConsults = (consultRes.data || []).length
+
+    // Super admin sees all notifications
+    const totalNotifs = pendingVerifs + pendingClaims + openReports + pendingWithdrawals + pendingTaskSubs
+    setNotifCount(totalNotifs)
+
+    // Role-specific notifications
+    const role = JSON.parse(localStorage.getItem('admin_user') || '{}').role || ''
+    if (role === 'super_admin') setRoleNotifCount(totalNotifs)
+    else if (role === 'verification_officer') setRoleNotifCount(pendingVerifs + newConsults)
+    else if (role === 'business_manager') setRoleNotifCount(pendingClaims)
+    else if (role === 'moderator' || role === 'content_manager') setRoleNotifCount(openReports)
+    else if (role === 'analytics_manager') setRoleNotifCount(pendingWithdrawals)
+    else setRoleNotifCount(0)
+
     setLoading(false)
   }
 
@@ -206,6 +254,8 @@ export default function AdminPanel() {
     { key: 'drugs', label: '💊 Drug Intel' },
     { key: 'tasks', label: '📋 Tasks' },
     { key: 'teams', label: '👨‍💼 Teams' },
+    { key: 'withdrawals', label: `💰 Withdrawals (${withdrawals.filter(w => w.status === 'pending').length})` },
+    { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
   const btnStyle = (active) => ({
@@ -224,12 +274,24 @@ export default function AdminPanel() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1 style={{ margin: '0 0 2px 0', fontSize: 19, fontWeight: 900 }}>CareFind Admin</h1>
-            <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{adminUser?.full_name} · {adminUser?.role}</p>
+            <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{adminUser?.full_name} · {adminUser?.role?.replace('_', ' ')}</p>
           </div>
-          <button onClick={() => { localStorage.removeItem('admin_token'); localStorage.removeItem('admin_user'); navigate('/admin') }}
-            style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
-            Sign Out
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {roleNotifCount > 0 && (
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setTab('overview')} style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  🔔
+                </button>
+                <div style={{ position: 'absolute', top: -4, right: -4, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f766e' }}>
+                  {roleNotifCount > 99 ? '99+' : roleNotifCount}
+                </div>
+              </div>
+            )}
+            <button onClick={() => { localStorage.removeItem('admin_token'); localStorage.removeItem('admin_user'); navigate('/admin') }}
+              style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
 
@@ -537,6 +599,60 @@ export default function AdminPanel() {
               <div key={m.id} style={{ border: '1px solid #e9d5ff', borderRadius: 12, padding: 12, background: '#faf5ff', marginTop: 12 }}>
                 <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 13, color: '#7c3aed' }}>👑 {m.full_name}</p>
                 <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{m.email} · Super Admin · Last login: {timeAgo(m.last_login)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+
+        {tab === 'withdrawals' && (
+          <div>
+            {withdrawals.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No withdrawal requests yet.</p>}
+            {withdrawals.map(w => (
+              <div key={w.id} style={{ ...card, border: `1px solid ${w.status === 'pending' ? '#fca5a5' : theme.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div>
+                    <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{w.profiles?.full_name || 'User'}</p>
+                    <p style={{ margin: '0 0 2px 0', fontSize: 13, color: theme.tealDeep, fontWeight: 700 }}>₦{(w.amount * 200).toLocaleString()}</p>
+                    {w.bank_name && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.textLight }}>{w.bank_name} · {w.account_number}</p>}
+                    {w.account_name && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.textLight }}>{w.account_name}</p>}
+                    <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{timeAgo(w.created_at)}</p>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, height: 'fit-content', background: w.status === 'approved' ? '#ecfdf5' : w.status === 'rejected' ? '#fef2f2' : '#fef3c7', color: w.status === 'approved' ? theme.success : w.status === 'rejected' ? theme.alert : '#92400e' }}>{w.status}</span>
+                </div>
+                {w.status === 'pending' && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={async () => { await supabase.from('withdrawal_requests').update({ status: 'approved' }).eq('id', w.id); loadAll() }} style={{ flex: 1, padding: 9, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✓ Approve</button>
+                    <button onClick={async () => { await supabase.from('withdrawal_requests').update({ status: 'rejected' }).eq('id', w.id); loadAll() }} style={{ flex: 1, padding: 9, background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✕ Reject</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'notifications' && (
+          <div>
+            {notifications.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '30px 10px' }}>
+                <p style={{ fontSize: 30, margin: '0 0 10px 0' }}>🔔</p>
+                <p style={{ color: theme.textLight, fontSize: 13 }}>All clear — no pending issues</p>
+              </div>
+            )}
+            {notifications.map((n, i) => (
+              <div key={i} onClick={() => setTab(n.tab)} style={{ ...card, cursor: 'pointer', borderLeft: `4px solid ${n.severity === 'urgent' ? theme.alert : n.severity === 'warning' ? '#f59e0b' : theme.tealDeep}` }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 20 }}>{n.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 13, color: theme.navy }}>{n.title}</p>
+                    {n.subtitle && <p style={{ margin: '0 0 4px 0', fontSize: 12, color: theme.textMid }}>{n.subtitle}</p>}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: 10, color: theme.textLight }}>{timeAgo(n.time)}</span>
+                      <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: n.severity === 'urgent' ? '#fef2f2' : n.severity === 'warning' ? '#fef3c7' : '#ecfdf5', color: n.severity === 'urgent' ? theme.alert : n.severity === 'warning' ? '#92400e' : theme.tealDeep, textTransform: 'uppercase' }}>{n.severity}</span>
+                    </div>
+                  </div>
+                  <span style={{ color: theme.textLight, fontSize: 14 }}>›</span>
+                </div>
               </div>
             ))}
           </div>
