@@ -16,6 +16,7 @@ function Feed() {
   const [profiles, setProfiles] = useState({})
   const [follows, setFollows] = useState([])
   const [savedPosts, setSavedPosts] = useState([])
+  const [userSubscriptions, setUserSubscriptions] = useState([])
   const [reportedPosts, setReportedPosts] = useState([])
   const [reportingId, setReportingId] = useState(null)
   const [giftingPost, setGiftingPost] = useState(null)
@@ -58,6 +59,7 @@ function Feed() {
     question: 'Question',
     review: 'Review',
     article: 'Article',
+    premium: '🔒 Premium',
   }
 
   const blockedPhrases = ['spam', 'buy now', 'click here', 'whatsapp me', 'send money', 'wire transfer']
@@ -133,8 +135,16 @@ function Feed() {
           .eq('user_id', user.id)
           .in('post_id', postIds)
         setSavedPosts(savedData || [])
+
+        const { data: subData } = await supabase
+          .from('user_subscriptions')
+          .select('professional_id')
+          .eq('subscriber_id', user.id)
+          .eq('status', 'active')
+        setUserSubscriptions((subData || []).map(s => s.professional_id))
       } else {
         setSavedPosts([])
+        setUserSubscriptions([])
       }
     } else {
       setReactions([])
@@ -827,7 +837,30 @@ function Feed() {
                     {'★'.repeat(post.rating)}{'☆'.repeat(5 - post.rating)}
                   </p>
                 )}
-                {post.post_type === 'article' ? (
+                {post.post_type === 'premium' && !userSubscriptions.includes(post.user_id) && user?.id !== post.user_id ? (
+                  <div>
+                    <p style={{ margin: '8px 0 0 0', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>
+                      {post.preview_text || post.content.slice(0, 120)}...
+                    </p>
+                    <div style={{ margin: '12px 0', background: 'linear-gradient(to bottom, rgba(249,250,251,0) 0%, #f9fafb 100%)', height: 40, marginTop: -20, position: 'relative', zIndex: 1 }} />
+                    <div style={{ border: `1px solid ${theme.tealBright}`, borderRadius: 14, padding: 14, background: '#ecfdf5', textAlign: 'center', marginBottom: 10 }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: 13, fontWeight: 800, color: theme.tealDeep }}>🔒 Subscriber Content</p>
+                      <p style={{ margin: '0 0 10px 0', fontSize: 12, color: theme.textMid }}>Subscribe to {profiles[post.user_id]?.full_name || 'this professional'} to read the full post</p>
+                      <button style={{ padding: '8px 20px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 20, fontWeight: 700, fontSize: 13 }}
+                        onClick={async () => {
+                          if (!user) { window.location.href = '/login'; return }
+                          const ref = `sub_${user.id.slice(0,8)}_${Date.now()}`
+                          const { data: subPlan } = await supabase.from('subscriptions').select('price').eq('professional_id', post.user_id).maybeSingle()
+                          const amount = subPlan?.price || 500
+                          const res = await fetch('/api/initiate-payment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, amount: amount * 100, ref, callback_url: `${window.location.origin}/?subscribed=${post.user_id}` }) })
+                          const data = await res.json()
+                          if (data.authorization_url) window.location.href = data.authorization_url
+                        }}>
+                        Subscribe to Read More
+                      </button>
+                    </div>
+                  </div>
+                ) : post.post_type === 'article' || post.post_type === 'premium' ? (
                   <div
                     className="article-body"
                     style={{ margin: '10px 0 12px 0', fontSize: 15, color: theme.textDark, lineHeight: 1.75, fontFamily: 'Georgia, "Times New Roman", serif' }}
