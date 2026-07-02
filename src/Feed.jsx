@@ -46,6 +46,7 @@ function Feed() {
   const [reviewSearching, setReviewSearching] = useState(false)
   const [profileComplete, setProfileComplete] = useState(true)
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [commentCounts, setCommentCounts] = useState({})
 
   const themeLabels = {
     'teal-depth': '🌊 Ocean',
@@ -117,7 +118,6 @@ function Feed() {
     }
 
     const postIds = (postData || []).map((p) => p.id)
-    setPosts(postData || [])
 
     if (postIds.length > 0) {
       const { data: reactionData } = await supabase
@@ -135,6 +135,37 @@ function Feed() {
       const profileMap = {}
       ;(profileData || []).forEach((p) => { profileMap[p.id] = p })
       setProfiles(profileMap)
+
+      // Comment counts for all loaded posts (for ranking)
+      const { data: commentRows } = await supabase
+        .from('post_comments')
+        .select('post_id')
+        .in('post_id', postIds)
+      const cCounts = {}
+      ;(commentRows || []).forEach((row) => { cCounts[row.post_id] = (cCounts[row.post_id] || 0) + 1 })
+      setCommentCounts(cCounts)
+
+      // Like counts per post
+      const lCounts = {}
+      ;(reactionData || []).forEach((r) => { lCounts[r.post_id] = (lCounts[r.post_id] || 0) + 1 })
+
+      // Score & rank: favor popular, strong verified boost, gentle recency
+      const scored = (postData || []).map((p) => {
+        const likes = lCounts[p.id] || 0
+        const comments = cCounts[p.id] || 0
+        const verified = profileMap[p.user_id]?.is_verified ? 1 : 0
+        const ageHours = (Date.now() - new Date(p.created_at)) / 3600000
+        let recency = 0
+        if (ageHours < 1) recency = 15
+        else if (ageHours < 6) recency = 10
+        else if (ageHours < 24) recency = 6
+        else if (ageHours < 72) recency = 3
+        else if (ageHours < 168) recency = 1
+        const score = (likes * 3) + (comments * 5) + (verified * 25) + recency
+        return { ...p, _score: score }
+      })
+      scored.sort((a, b) => b._score - a._score || new Date(b.created_at) - new Date(a.created_at))
+      setPosts(scored)
 
       const { data: followData } = await supabase
         .from('follows')
@@ -161,6 +192,7 @@ function Feed() {
         setUserSubscriptions([])
       }
     } else {
+      setPosts([])
       setReactions([])
       setProfiles({})
       setFollows([])
