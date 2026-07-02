@@ -46,6 +46,10 @@ export default function AdminPanel() {
   const [staffTeam, setStaffTeam] = useState('')
   const [savingStaff, setSavingStaff] = useState(false)
   const [staffMsg, setStaffMsg] = useState('')
+  const [verifyingUser, setVerifyingUser] = useState(null)
+  const [verifySpecialty, setVerifySpecialty] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   useEffect(() => {
     try {
@@ -132,10 +136,11 @@ export default function AdminPanel() {
     loadAll()
   }
 
-  async function manualVerify(userId) {
-    const s = window.prompt('Enter specialty to verify:')
-    if (!s) return
-    await supabase.from('profiles').update({ is_verified: true, verification_label: s, specialty: s }).eq('id', userId)
+  async function manualVerify(userId, specialty) {
+    if (!specialty) return
+    await supabase.from('profiles').update({ is_verified: true, verification_label: specialty, specialty }).eq('id', userId)
+    setVerifyingUser(null)
+    setVerifySpecialty('')
     loadAll()
   }
 
@@ -238,19 +243,50 @@ export default function AdminPanel() {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
               {[
-                { label: 'Total Users', value: stats.users, icon: '👥' },
-                { label: 'Total Posts', value: stats.posts, icon: '📝' },
-                { label: 'Pending Verifs', value: stats.pendingVerifs, icon: '🩺', alert: stats.pendingVerifs > 0 },
-                { label: 'Open Reports', value: stats.reports, icon: '🚩', alert: stats.reports > 0 },
-                { label: 'Transactions', value: stats.transactions, icon: '💳' },
-                { label: 'Revenue', value: `₦${(stats.revenue || 0).toLocaleString()}`, icon: '💰' },
+                { label: 'Total Users', value: stats.users, icon: '👥', tab: 'users' },
+                { label: 'Total Posts', value: stats.posts, icon: '📝', tab: 'posts' },
+                { label: 'Pending Verifs', value: stats.pendingVerifs, icon: '🩺', alert: stats.pendingVerifs > 0, tab: 'verifications' },
+                { label: 'Open Reports', value: stats.reports, icon: '🚩', alert: stats.reports > 0, tab: 'reports' },
+                { label: 'Transactions', value: stats.transactions, icon: '💳', tab: 'revenue' },
+                { label: 'Revenue', value: `₦${(stats.revenue || 0).toLocaleString()}`, icon: '💰', tab: 'revenue' },
               ].map(s => (
-                <div key={s.label} style={{ border: `1px solid ${s.alert ? '#fca5a5' : theme.border}`, borderRadius: 14, padding: 14, background: s.alert ? '#fef2f2' : theme.cardBg, textAlign: 'center' }}>
+                <div key={s.label} onClick={() => setTab(s.tab)} style={{ border: `1px solid ${s.alert ? '#fca5a5' : theme.border}`, borderRadius: 14, padding: 14, background: s.alert ? '#fef2f2' : theme.cardBg, textAlign: 'center', cursor: 'pointer' }}>
                   <p style={{ margin: '0 0 4px 0', fontSize: 20 }}>{s.icon}</p>
                   <p style={{ margin: '0 0 2px 0', fontSize: 20, fontWeight: 900, color: s.alert ? theme.alert : theme.navy }}>{s.value}</p>
                   <p style={{ margin: 0, fontSize: 10, color: theme.textLight, fontWeight: 700 }}>{s.label}</p>
                 </div>
               ))}
+            </div>
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 14, background: theme.cardBg, marginTop: 4 }}>
+              <p style={{ margin: '0 0 10px 0', fontWeight: 800, fontSize: 13, color: theme.navy }}>📅 Filter by Date</p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: theme.textLight, fontWeight: 700, display: 'block', marginBottom: 3 }}>From</label>
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, fontSize: 12, border: `1px solid ${theme.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: theme.textLight, fontWeight: 700, display: 'block', marginBottom: 3 }}>To</label>
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, fontSize: 12, border: `1px solid ${theme.border}`, borderRadius: 8, boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              {(dateFrom || dateTo) && (
+                <div>
+                  <p style={{ margin: '0 0 6px 0', fontSize: 12, color: theme.textMid, fontWeight: 600 }}>Activity in range:</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[
+                      { label: 'Posts', value: posts.filter(p => (!dateFrom || p.created_at >= dateFrom) && (!dateTo || p.created_at <= dateTo + 'T23:59:59')).length },
+                      { label: 'Users', value: users.filter(u => (!dateFrom || u.created_at >= dateFrom) && (!dateTo || u.created_at <= dateTo + 'T23:59:59')).length },
+                      { label: 'Transactions', value: transactions.filter(t => (!dateFrom || t.created_at >= dateFrom) && (!dateTo || t.created_at <= dateTo + 'T23:59:59')).length },
+                    ].map(s => (
+                      <div key={s.label} style={{ flex: 1, background: '#ecfdf5', borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
+                        <p style={{ margin: '0 0 2px 0', fontSize: 18, fontWeight: 900, color: theme.tealDeep }}>{s.value}</p>
+                        <p style={{ margin: 0, fontSize: 10, color: theme.textLight, fontWeight: 700 }}>{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => { setDateFrom(''); setDateTo('') }} style={{ marginTop: 8, padding: '5px 10px', background: 'none', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 11, color: theme.textLight }}>Clear filter</button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -337,9 +373,17 @@ export default function AdminPanel() {
                   {u.is_verified && <span style={{ fontSize: 9.5, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 7px', borderRadius: 20 }}>✓ Verified</span>}
                 </div>
                 {!u.is_verified && (
-                  <button onClick={() => manualVerify(u.id)} style={{ padding: '6px 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
-                    ✓ Verify
-                  </button>
+                  verifyingUser === u.id ? (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <input value={verifySpecialty} onChange={(e) => setVerifySpecialty(e.target.value)} placeholder="Specialty (e.g. Pharmacist)" style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: `1px solid ${theme.tealDeep}`, borderRadius: 8 }} />
+                      <button onClick={() => manualVerify(u.id, verifySpecialty)} style={{ padding: '6px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>✓</button>
+                      <button onClick={() => { setVerifyingUser(null); setVerifySpecialty('') }} style={{ padding: '6px 8px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 11 }}>✕</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setVerifyingUser(u.id)} style={{ padding: '6px 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
+                      ✓ Verify
+                    </button>
+                  )
                 )}
               </div>
             ))}
