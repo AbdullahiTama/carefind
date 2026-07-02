@@ -112,33 +112,32 @@ function ProfessionalDashboard() {
       </div>
 
       <div style={{ padding: '20px 20px 0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Link to="/earn" style={{ textDecoration: 'none' }}>
+          <div style={{ border: `1px solid ${theme.tealBright}`, borderRadius: 16, padding: 14, display: 'flex', alignItems: 'center', gap: 12, background: '#ecfdf5', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <span style={{ width: 34, height: 34, borderRadius: 10, background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>💰</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 13.5, color: theme.tealDeep, fontWeight: 800 }}>Earn on CareFind</p>
+              <p style={{ margin: 0, fontSize: 11, color: theme.tealDeep }}>Subscriptions, consultations & tasks</p>
+            </div>
+            <span style={{ color: theme.tealDeep, fontSize: 16 }}>›</span>
+          </div>
+        </Link>
+
         {[
-          { icon: '💰', label: 'Gift Earnings', desc: 'Requires Phase 11 wallet system' },
-          { icon: '📅', label: 'Consultation Bookings', desc: 'Requires Phase 11 payments' },
-          { icon: '📰', label: 'Subscriber Content', desc: 'Requires Phase 11 subscriptions' },
-          { icon: '📋', label: 'Sponsored Task Inbox', desc: 'Requires brand partnerships' },
           { icon: '👥', label: 'Invite Staff/Assistant', desc: 'Coming in a future update' },
         ].map((item) => (
           <div key={item.label} style={{
             border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, display: 'flex',
             alignItems: 'center', gap: 12, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
           }}>
-            <span style={{
-              width: 34, height: 34, borderRadius: 10, background: theme.bg, display: 'flex',
-              alignItems: 'center', justifyContent: 'center', fontSize: 16,
-            }}>
+            <span style={{ width: 34, height: 34, borderRadius: 10, background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
               {item.icon}
             </span>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: 13.5, color: theme.textMid, fontWeight: 600 }}>{item.label}</p>
               <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{item.desc}</p>
             </div>
-            <span style={{
-              fontSize: 10, fontWeight: 800, color: theme.textLight, background: theme.bg,
-              padding: '3px 8px', borderRadius: 10, textTransform: 'uppercase', letterSpacing: '0.03em',
-            }}>
-              Soon
-            </span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: theme.textLight, background: theme.bg, padding: '3px 8px', borderRadius: 10, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Soon</span>
           </div>
         ))}
       </div>
