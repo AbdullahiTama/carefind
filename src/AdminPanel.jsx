@@ -33,6 +33,23 @@ export default function AdminPanel() {
   const [drugSearch, setDrugSearch] = useState('')
   const [drugReviews, setDrugReviews] = useState([])
   const [drugName, setDrugName] = useState('')
+  const [drugRatingFilter, setDrugRatingFilter] = useState('all')
+  const [drugDateFrom, setDrugDateFrom] = useState('')
+  const [drugDateTo, setDrugDateTo] = useState('')
+  const [postTypeFilter, setPostTypeFilter] = useState('all')
+  const [postDateFrom, setPostDateFrom] = useState('')
+  const [postDateTo, setPostDateTo] = useState('')
+  const [userVerifiedFilter, setUserVerifiedFilter] = useState('all')
+  const [userSpecialtyFilter, setUserSpecialtyFilter] = useState('')
+  const [reportStatusFilter, setReportStatusFilter] = useState('pending')
+  const [businesses, setBusinesses] = useState([])
+  const [bizSearch, setBizSearch] = useState('')
+  const [bizTypeFilter, setBizTypeFilter] = useState('all')
+  const [bizStateFilter, setBizStateFilter] = useState('')
+  const [bizStatusFilter, setBizStatusFilter] = useState('all')
+  const [selectedBiz, setSelectedBiz] = useState(null)
+  const [bizReviews, setBizReviews] = useState([])
+  const [bizProducts, setBizProducts] = useState([])
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDesc, setTaskDesc] = useState('')
   const [taskComp, setTaskComp] = useState('')
@@ -84,7 +101,7 @@ export default function AdminPanel() {
     // Load posts separately to avoid one failure killing everything
     const postsRes = await supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50)
     
-    const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes] = await Promise.all([
+    const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes, bizRes] = await Promise.all([
       supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
@@ -92,6 +109,7 @@ export default function AdminPanel() {
       supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(50),
       supabase.from('tasks').select('*').order('created_at', { ascending: false }),
       supabase.from('admin_teams').select('*').order('created_at'),
+      supabase.from('businesses').select('id, name, business_type, city, state, whatsapp, visible_on_carefind, created_at').order('created_at', { ascending: false }).limit(100),
       supabase.from('admin_users').select('*').order('created_at'),
       supabase.from('withdrawal_requests').select('*, profiles(full_name, display_name)').order('created_at', { ascending: false }),
       supabase.from('task_submissions').select('*, tasks(title), profiles(full_name, display_name)').order('created_at', { ascending: false }).limit(20),
@@ -119,6 +137,7 @@ export default function AdminPanel() {
     ].sort((a, b) => new Date(b.time) - new Date(a.time))
 
     setNotifications(allNotifs)
+    setBusinesses(bizRes.data || [])
     const rev = (txRes.data || []).filter(t => t.type === 'topup').reduce((s, t) => s + (t.naira_amount || 0), 0)
     const pendingVerifs = (verifRes.data || []).filter(v => v.status === 'pending').length
     const pendingClaims = (claimsRes.data || []).filter(c => c.status === 'pending').length
@@ -258,6 +277,7 @@ export default function AdminPanel() {
     { key: 'tasks', label: '📋 Tasks' },
     { key: 'teams', label: '👨‍💼 Teams' },
     { key: 'withdrawals', label: `💰 Withdrawals (${withdrawals.filter(w => w.status === 'pending').length})` },
+    { key: 'businesses', label: `🏢 Companies (${businesses.length})` },
     { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
@@ -426,8 +446,40 @@ export default function AdminPanel() {
 
         {tab === 'users' && (
           <div>
-            <input type="text" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Search users..." style={{ ...input, marginBottom: 12 }} />
-            {users.filter(u => !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())).map(u => (
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Filter Users</p>
+              <input type="text" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Search by name..." style={{ ...input, marginBottom: 8 }} />
+              <input type="text" value={userSpecialtyFilter} onChange={(e) => setUserSpecialtyFilter(e.target.value)} placeholder="Filter by specialty..." style={{ ...input, marginBottom: 8 }} />
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                {['all','verified','unverified'].map(f => (
+                  <button key={f} onClick={() => setUserVerifiedFilter(f)} style={{ flex: 1, padding: '6px 0', borderRadius: 10, fontSize: 11, fontWeight: 700, border: 'none', background: userVerifiedFilter === f ? theme.tealDeep : theme.bg, color: userVerifiedFilter === f ? '#fff' : theme.textMid, textTransform: 'capitalize' }}>{f}</button>
+                ))}
+              </div>
+              <button onClick={() => {
+                const filtered = users.filter(u => {
+                  const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
+                  const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
+                  const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
+                  return matchSearch && matchVerified && matchSpecialty
+                })
+                exportCSV(filtered, 'filtered_users.csv')
+              }} style={{ width: '100%', padding: 8, background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12 }}>Export Filtered CSV</button>
+            </div>
+            {(() => {
+              const filtered = users.filter(u => {
+                const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
+                const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
+                const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
+                return matchSearch && matchVerified && matchSpecialty
+              })
+              return <p style={{ fontSize: 11, color: theme.textLight, margin: '0 0 8px 0' }}>{filtered.length} user{filtered.length !== 1 ? 's' : ''} found</p>
+            })()}
+            {users.filter(u => {
+              const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
+              const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
+              const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
+              return matchSearch && matchVerified && matchSpecialty
+            }).map(u => (
               <div key={u.id} style={card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <div>
@@ -457,21 +509,64 @@ export default function AdminPanel() {
 
         {tab === 'posts' && (
           <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input type="text" value={postSearch} onChange={(e) => setPostSearch(e.target.value)} placeholder="Search posts..." style={{ ...input, flex: 1 }} />
-              <button onClick={() => exportCSV(posts, 'posts.csv')} style={{ padding: '0 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700 }}>Export</button>
-            </div>
-            {posts.filter(p => !postSearch || p.content?.toLowerCase().includes(postSearch.toLowerCase())).map(p => (
-              <div key={p.id} style={card}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{p.post_type}</span>
-                  <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(p.created_at)}</span>
-                </div>
-                <p style={{ margin: '0 0 4px 0', fontSize: 12, color: theme.textLight }}>User ID: {p.user_id?.slice(0,8)}...</p>
-                <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textMid }}>{p.content?.slice(0, 150)}</p>
-                <button onClick={() => deletePost(p.id)} style={{ padding: '6px 12px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️ Delete</button>
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Filter Posts</p>
+              <input type="text" value={postSearch} onChange={(e) => setPostSearch(e.target.value)} placeholder="Search by keyword..." style={{ ...input, marginBottom: 8 }} />
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                {['all','text','question','review','article','visual','premium'].map(t => (
+                  <button key={t} onClick={() => setPostTypeFilter(t)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, border: 'none', background: postTypeFilter === t ? theme.tealDeep : theme.bg, color: postTypeFilter === t ? '#fff' : theme.textMid, textTransform: 'capitalize' }}>{t}</button>
+                ))}
               </div>
-            ))}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: theme.textLight, fontWeight: 700, display: 'block', marginBottom: 2 }}>From</label>
+                  <input type="date" value={postDateFrom} onChange={(e) => setPostDateFrom(e.target.value)} style={{ ...input }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: theme.textLight, fontWeight: 700, display: 'block', marginBottom: 2 }}>To</label>
+                  <input type="date" value={postDateTo} onChange={(e) => setPostDateTo(e.target.value)} style={{ ...input }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => {
+                  const filtered = posts.filter(p => {
+                    const matchSearch = !postSearch || p.content?.toLowerCase().includes(postSearch.toLowerCase())
+                    const matchType = postTypeFilter === 'all' || p.post_type === postTypeFilter
+                    const matchFrom = !postDateFrom || p.created_at >= postDateFrom
+                    const matchTo = !postDateTo || p.created_at <= postDateTo + 'T23:59:59'
+                    return matchSearch && matchType && matchFrom && matchTo
+                  })
+                  exportCSV(filtered, 'filtered_posts.csv')
+                }} style={{ flex: 1, padding: 8, background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12 }}>
+                  Export Filtered CSV
+                </button>
+                <button onClick={() => { setPostSearch(''); setPostTypeFilter('all'); setPostDateFrom(''); setPostDateTo('') }} style={{ padding: '0 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 11 }}>Clear</button>
+              </div>
+            </div>
+            {(() => {
+              const filtered = posts.filter(p => {
+                const matchSearch = !postSearch || p.content?.toLowerCase().includes(postSearch.toLowerCase())
+                const matchType = postTypeFilter === 'all' || p.post_type === postTypeFilter
+                const matchFrom = !postDateFrom || p.created_at >= postDateFrom
+                const matchTo = !postDateTo || p.created_at <= postDateTo + 'T23:59:59'
+                return matchSearch && matchType && matchFrom && matchTo
+              })
+              return (
+                <div>
+                  <p style={{ fontSize: 11, color: theme.textLight, margin: '0 0 8px 0' }}>{filtered.length} post{filtered.length !== 1 ? 's' : ''} found</p>
+                  {filtered.map(p => (
+                    <div key={p.id} style={card}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', background: '#ecfdf5', padding: '2px 7px', borderRadius: 20 }}>{p.post_type}</span>
+                        <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(p.created_at)}</span>
+                      </div>
+                      <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textMid }}>{p.content?.slice(0, 150)}</p>
+                      <button onClick={() => deletePost(p.id)} style={{ padding: '6px 12px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️ Delete</button>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -498,24 +593,75 @@ export default function AdminPanel() {
 
         {tab === 'drugs' && (
           <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input type="text" value={drugSearch} onChange={(e) => setDrugSearch(e.target.value)} placeholder="Search medication..." style={{ ...input, flex: 1 }} />
-              <button onClick={searchDrugs} style={{ padding: '0 14px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>Search</button>
-            </div>
-            {drugReviews.length > 0 && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{drugName} — {drugReviews.length} reviews</p>
-                  <button onClick={() => exportCSV(drugReviews, `${drugName}_reviews.csv`)} style={{ padding: '6px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>Export</button>
-                </div>
-                {drugReviews.map(r => (
-                  <div key={r.id} style={card}>
-                    <p style={{ margin: '0 0 4px 0', color: '#f59e0b', fontSize: 13 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
-                    {r.comment && <p style={{ margin: 0, fontSize: 13, color: theme.textMid }}>{r.comment}</p>}
-                  </div>
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Drug Intelligence Search</p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input type="text" value={drugSearch} onChange={(e) => setDrugSearch(e.target.value)} placeholder="Medication name..." style={{ ...input, flex: 1 }} />
+                <button onClick={searchDrugs} style={{ padding: '0 14px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>Search</button>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 700 }}>Rating:</span>
+                {['all','1','2','3','4','5'].map(r => (
+                  <button key={r} onClick={() => setDrugRatingFilter(r)} style={{ padding: '4px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, border: 'none', background: drugRatingFilter === r ? theme.tealDeep : theme.bg, color: drugRatingFilter === r ? '#fff' : theme.textMid }}>
+                    {r === 'all' ? 'All' : '★'.repeat(parseInt(r))}
+                  </button>
                 ))}
               </div>
-            )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: theme.textLight, fontWeight: 700, display: 'block', marginBottom: 2 }}>From</label>
+                  <input type="date" value={drugDateFrom} onChange={(e) => setDrugDateFrom(e.target.value)} style={{ ...input }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: theme.textLight, fontWeight: 700, display: 'block', marginBottom: 2 }}>To</label>
+                  <input type="date" value={drugDateTo} onChange={(e) => setDrugDateTo(e.target.value)} style={{ ...input }} />
+                </div>
+              </div>
+            </div>
+
+            {drugReviews.length > 0 && (() => {
+              const filtered = drugReviews.filter(r => {
+                const matchRating = drugRatingFilter === 'all' || r.rating === parseInt(drugRatingFilter)
+                const matchFrom = !drugDateFrom || r.created_at >= drugDateFrom
+                const matchTo = !drugDateTo || r.created_at <= drugDateTo + 'T23:59:59'
+                return matchRating && matchFrom && matchTo
+              })
+              const avgRating = filtered.length ? (filtered.reduce((s, r) => s + r.rating, 0) / filtered.length).toFixed(1) : 0
+              const positive = filtered.filter(r => r.rating >= 4).length
+              const negative = filtered.filter(r => r.rating <= 2).length
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div>
+                      <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{drugName}</p>
+                      <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{filtered.length} reviews · Avg: ★{avgRating}</p>
+                    </div>
+                    <button onClick={() => exportCSV(filtered, `${drugName}_filtered_reviews.csv`)} style={{ padding: '6px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>Export CSV</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    {[
+                      { label: 'Positive', value: positive, color: '#ecfdf5', textColor: theme.success },
+                      { label: 'Neutral', value: filtered.length - positive - negative, color: '#fef9c3', textColor: '#92400e' },
+                      { label: 'Negative', value: negative, color: '#fef2f2', textColor: theme.alert },
+                    ].map(s => (
+                      <div key={s.label} style={{ flex: 1, background: s.color, borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                        <p style={{ margin: '0 0 2px 0', fontSize: 18, fontWeight: 900, color: s.textColor }}>{s.value}</p>
+                        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: s.textColor }}>{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {filtered.map(r => (
+                    <div key={r.id} style={card}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <p style={{ margin: 0, color: '#f59e0b', fontSize: 13 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+                        <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(r.created_at)}</span>
+                      </div>
+                      {r.comment && <p style={{ margin: 0, fontSize: 13, color: theme.textMid }}>{r.comment}</p>}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -631,6 +777,108 @@ export default function AdminPanel() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === 'businesses' && (
+          <div>
+            <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Filter Companies</p>
+              <input type="text" value={bizSearch} onChange={(e) => setBizSearch(e.target.value)} placeholder="Search company name..." style={{ ...input, marginBottom: 8 }} />
+              <input type="text" value={bizStateFilter} onChange={(e) => setBizStateFilter(e.target.value)} placeholder="Filter by state/city..." style={{ ...input, marginBottom: 8 }} />
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                {['all','pharmacy','hospital','clinic','dental','optical','wellness','skincare'].map(t => (
+                  <button key={t} onClick={() => setBizTypeFilter(t)} style={{ padding: '4px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, border: 'none', background: bizTypeFilter === t ? theme.tealDeep : theme.bg, color: bizTypeFilter === t ? '#fff' : theme.textMid, textTransform: 'capitalize' }}>{t}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                {['all','claimed','unclaimed'].map(s => (
+                  <button key={s} onClick={() => setBizStatusFilter(s)} style={{ flex: 1, padding: '6px 0', borderRadius: 10, fontSize: 11, fontWeight: 700, border: 'none', background: bizStatusFilter === s ? theme.tealDeep : theme.bg, color: bizStatusFilter === s ? '#fff' : theme.textMid, textTransform: 'capitalize' }}>{s}</button>
+                ))}
+              </div>
+              <button onClick={() => {
+                const filtered = businesses.filter(b => {
+                  const matchSearch = !bizSearch || b.name?.toLowerCase().includes(bizSearch.toLowerCase())
+                  const matchType = bizTypeFilter === 'all' || b.business_type === bizTypeFilter
+                  const matchState = !bizStateFilter || (b.state || b.city || '').toLowerCase().includes(bizStateFilter.toLowerCase())
+                  const matchStatus = bizStatusFilter === 'all' || (bizStatusFilter === 'claimed' ? b.visible_on_carefind : !b.visible_on_carefind)
+                  return matchSearch && matchType && matchState && matchStatus
+                })
+                exportCSV(filtered, 'filtered_companies.csv')
+              }} style={{ width: '100%', padding: 8, background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12 }}>Export Filtered CSV</button>
+            </div>
+
+            {selectedBiz && (
+              <div style={{ border: `1px solid ${theme.tealBright}`, borderRadius: 14, padding: 14, background: '#ecfdf5', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <p style={{ margin: 0, fontWeight: 800, fontSize: 15, color: theme.navy }}>{selectedBiz.name}</p>
+                  <button onClick={() => { setSelectedBiz(null); setBizReviews([]); setBizProducts([]) }} style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: 18 }}>✕</button>
+                </div>
+                <p style={{ margin: '0 0 8px 0', fontSize: 12, color: theme.textLight, textTransform: 'capitalize' }}>{selectedBiz.business_type} · {selectedBiz.city}, {selectedBiz.state}</p>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1, background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 2px 0', fontSize: 18, fontWeight: 900, color: theme.navy }}>{bizReviews.length}</p>
+                    <p style={{ margin: 0, fontSize: 10, color: theme.textLight, fontWeight: 700 }}>Reviews</p>
+                  </div>
+                  <div style={{ flex: 1, background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 2px 0', fontSize: 18, fontWeight: 900, color: theme.navy }}>{bizProducts.length}</p>
+                    <p style={{ margin: 0, fontSize: 10, color: theme.textLight, fontWeight: 700 }}>Products</p>
+                  </div>
+                  <div style={{ flex: 1, background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 2px 0', fontSize: 18, fontWeight: 900, color: bizReviews.length ? theme.tealDeep : theme.textLight }}>
+                      {bizReviews.length ? (bizReviews.reduce((s, r) => s + r.rating, 0) / bizReviews.length).toFixed(1) : 'N/A'}
+                    </p>
+                    <p style={{ margin: 0, fontSize: 10, color: theme.textLight, fontWeight: 700 }}>Avg Rating</p>
+                  </div>
+                </div>
+                <button onClick={() => exportCSV([...bizReviews, ...bizProducts], `${selectedBiz.name}_data.csv`)} style={{ width: '100%', padding: 8, background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12 }}>Export Company Data CSV</button>
+                {bizReviews.map(r => (
+                  <div key={r.id} style={{ marginTop: 8, padding: '8px 0', borderTop: `1px solid ${theme.border}` }}>
+                    <p style={{ margin: '0 0 2px 0', color: '#f59e0b', fontSize: 12 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
+                    {r.comment && <p style={{ margin: 0, fontSize: 12, color: theme.textMid }}>{r.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(() => {
+              const filtered = businesses.filter(b => {
+                const matchSearch = !bizSearch || b.name?.toLowerCase().includes(bizSearch.toLowerCase())
+                const matchType = bizTypeFilter === 'all' || b.business_type === bizTypeFilter
+                const matchState = !bizStateFilter || (b.state || b.city || '').toLowerCase().includes(bizStateFilter.toLowerCase())
+                const matchStatus = bizStatusFilter === 'all' || (bizStatusFilter === 'claimed' ? b.visible_on_carefind : !b.visible_on_carefind)
+                return matchSearch && matchType && matchState && matchStatus
+              })
+              return (
+                <div>
+                  <p style={{ fontSize: 11, color: theme.textLight, margin: '0 0 8px 0' }}>{filtered.length} compan{filtered.length !== 1 ? 'ies' : 'y'} found</p>
+                  {filtered.map(b => (
+                    <div key={b.id} style={{ ...card, cursor: 'pointer' }} onClick={async () => {
+                      setSelectedBiz(b)
+                      const [revRes, prodRes] = await Promise.all([
+                        supabase.from('reviews').select('*').eq('business_id', b.id),
+                        supabase.from('products').select('*').eq('business_id', b.id),
+                      ])
+                      setBizReviews(revRes.data || [])
+                      setBizProducts(prodRes.data || [])
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{b.name}</p>
+                          <p style={{ margin: '0 0 4px 0', fontSize: 12, color: theme.textLight, textTransform: 'capitalize' }}>{b.business_type} · {b.city}, {b.state}</p>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 20, background: b.visible_on_carefind ? '#ecfdf5' : '#fef3c7', color: b.visible_on_carefind ? theme.success : '#92400e' }}>
+                            {b.visible_on_carefind ? 'Claimed' : 'Unclaimed'}
+                          </span>
+                          <span style={{ fontSize: 10, color: theme.textLight }}>Tap to view</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )}
 
