@@ -3,10 +3,123 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
-import AdminStaff from './AdminStaff.jsx'
-import AdminTeams from './AdminTeams.jsx'
 
-function AdminPanel() {
+function hashPassword(p) { return `cf_hashed_${p}` }
+
+function TeamsTab({ adminUser }) {
+  const [teams, setTeams] = useState([])
+  const [staff, setStaff] = useState([])
+  const [creatingTeam, setCreatingTeam] = useState(false)
+  const [creatingStaff, setCreatingStaff] = useState(false)
+  const [teamName, setTeamName] = useState('')
+  const [teamDesc, setTeamDesc] = useState('')
+  const [staffName, setStaffName] = useState('')
+  const [staffEmail, setStaffEmail] = useState('')
+  const [staffPass, setStaffPass] = useState('')
+  const [staffRole, setStaffRole] = useState('moderator')
+  const [staffTeam, setStaffTeam] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => { loadTeamData() }, [])
+
+  async function loadTeamData() {
+    const [t, s] = await Promise.all([
+      supabase.from('admin_teams').select('*').order('created_at'),
+      supabase.from('admin_users').select('*').order('created_at'),
+    ])
+    setTeams(t.data || [])
+    setStaff(s.data || [])
+  }
+
+  async function doCreateTeam(e) {
+    e.preventDefault(); setSaving(true)
+    await supabase.from('admin_teams').insert({ name: teamName, description: teamDesc, created_by: adminUser?.id })
+    setTeamName(''); setTeamDesc(''); setCreatingTeam(false)
+    setMsg('Team created!'); setSaving(false); loadTeamData()
+  }
+
+  async function doCreateStaff(e) {
+    e.preventDefault(); setSaving(true)
+    const { error } = await supabase.from('admin_users').insert({
+      email: staffEmail.toLowerCase(), password_hash: hashPassword(staffPass),
+      full_name: staffName, role: staffRole, team_id: staffTeam || null, created_by: adminUser?.id,
+    })
+    if (error) { setMsg(`Error: ${error.message}`) } else {
+      setStaffName(''); setStaffEmail(''); setStaffPass(''); setCreatingStaff(false); setMsg('Staff account created!')
+    }
+    setSaving(false); loadTeamData()
+  }
+
+  const ROLE_LABELS = { super_admin: '👑 Super Admin', moderator: '🛡️ Moderator', verification_officer: '🩺 Verification Officer', business_manager: '🏥 Business Manager', support_agent: '💬 Support Agent', analytics_manager: '📊 Analytics' }
+  function timeAgo(d) { if (!d) return 'Never'; const diff = Math.floor((Date.now() - new Date(d))/1000); if (diff < 3600) return `${Math.floor(diff/60)}m ago`; if (diff < 86400) return `${Math.floor(diff/3600)}h ago`; return `${Math.floor(diff/86400)}d ago` }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {msg && <p style={{ color: theme.success, fontSize: 13, fontWeight: 600 }}>✓ {msg}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => { setCreatingTeam(!creatingTeam); setCreatingStaff(false) }} style={{ flex: 1, padding: 10, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13 }}>
+          {creatingTeam ? 'Cancel' : '+ New Team'}
+        </button>
+        <button onClick={() => { setCreatingStaff(!creatingStaff); setCreatingTeam(false) }} style={{ flex: 1, padding: 10, background: theme.navy, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13 }}>
+          {creatingStaff ? 'Cancel' : '+ Add Staff'}
+        </button>
+      </div>
+      {creatingTeam && (
+        <form onSubmit={doCreateTeam} style={{ border: `1px solid ${theme.tealBright}`, borderRadius: 14, padding: 14, background: '#ecfdf5', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="Team Name" required style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+          <input value={teamDesc} onChange={(e) => setTeamDesc(e.target.value)} placeholder="Description (optional)" style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+          <button type="submit" disabled={saving} style={{ padding: 10, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700 }}>{saving ? 'Creating...' : 'Create Team'}</button>
+        </form>
+      )}
+      {creatingStaff && (
+        <form onSubmit={doCreateStaff} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 14, background: theme.cardBg, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Full Name" required style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+          <input type="email" value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} placeholder="Email" required style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+          <input type="password" value={staffPass} onChange={(e) => setStaffPass(e.target.value)} placeholder="Password" required style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+          <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)} style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10, background: '#fff' }}>
+            {['moderator','verification_officer','business_manager','support_agent','analytics_manager'].map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </select>
+          <select value={staffTeam} onChange={(e) => setStaffTeam(e.target.value)} style={{ padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10, background: '#fff' }}>
+            <option value="">No team</option>
+            {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <button type="submit" disabled={saving} style={{ padding: 10, background: theme.navy, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700 }}>{saving ? 'Creating...' : 'Create Staff Account'}</button>
+        </form>
+      )}
+      {teams.map(t => {
+        const members = staff.filter(s => s.team_id === t.id)
+        return (
+          <div key={t.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', background: theme.cardBg }}>
+            <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between' }}>
+              <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{t.name}</p>
+              <span style={{ fontSize: 11, fontWeight: 700, color: theme.tealDeep }}>{members.length} member{members.length !== 1 ? 's' : ''}</span>
+            </div>
+            {members.length === 0 && <p style={{ padding: '10px 14px', color: theme.textLight, fontSize: 12, margin: 0 }}>No members yet</p>}
+            {members.map(m => (
+              <div key={m.id} style={{ padding: '10px 14px', borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ margin: '0 0 1px 0', fontSize: 13, fontWeight: 700, color: theme.navy }}>{m.full_name}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>{ROLE_LABELS[m.role] || m.role}</p>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 20, background: m.is_active ? '#ecfdf5' : '#fef2f2', color: m.is_active ? theme.success : theme.alert }}>{m.is_active ? 'Active' : 'Suspended'}</span>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+      <p style={{ fontSize: 11, fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', margin: '4px 0 0 0' }}>👑 Super Admin</p>
+      {staff.filter(s => s.role === 'super_admin').map(m => (
+        <div key={m.id} style={{ border: '1px solid #e9d5ff', borderRadius: 12, padding: 12, background: '#faf5ff' }}>
+          <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 13, color: '#7c3aed' }}>{m.full_name}</p>
+          <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{m.email}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [isAdmin, setIsAdmin] = useState(false)
