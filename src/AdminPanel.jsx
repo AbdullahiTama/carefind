@@ -70,11 +70,6 @@ export default function AdminPanel() {
       }
       const parsedAdmin = JSON.parse(userData)
       setAdminUser(parsedAdmin)
-      // Sign in anonymously so Supabase client can make authenticated requests
-      const { data: anonSession } = await supabase.auth.getSession()
-      if (!anonSession.session) {
-        await supabase.auth.signInAnonymously().catch(() => {})
-      }
       loadAll()
     } catch { navigate('/admin') }
 
@@ -86,12 +81,14 @@ export default function AdminPanel() {
   }, [])
 
   async function loadAll() {
-    const [usersRes, verifRes, claimsRes, reportsRes, postsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes] = await Promise.all([
+    // Load posts separately to avoid one failure killing everything
+    const postsRes = await supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50)
+    
+    const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes] = await Promise.all([
       supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
       supabase.from('reports').select('*, posts(content)').order('created_at', { ascending: false }).limit(30),
-      supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50),
       supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(50),
       supabase.from('tasks').select('*').order('created_at', { ascending: false }),
       supabase.from('admin_teams').select('*').order('created_at'),
