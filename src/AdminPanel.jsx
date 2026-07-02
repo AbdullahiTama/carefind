@@ -4,6 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 const AdminStaff = React.lazy(() => import('./AdminStaff.jsx'))
+const AdminTeams = React.lazy(() => import('./AdminTeams.jsx'))
 
 function AdminPanel() {
   const { user, loading: authLoading } = useAuth()
@@ -89,7 +90,7 @@ function AdminPanel() {
   }, [user, authLoading])
 
   async function loadAll() {
-    const [usersRes, verifRes, claimsRes, reportsRes, postsRes, txRes, tasksRes] = await Promise.all([
+    const [usersRes, verifRes, claimsRes, reportsRes, postsRes, txRes, tasksRes, notifRes] = await Promise.all([
       supabase.from('profiles').select('id, full_name, display_name, is_verified, is_admin, created_at, specialty').order('created_at', { ascending: false }).limit(50),
       supabase.from('verification_requests').select('*, profiles(full_name, display_name)').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name), profiles(full_name, display_name)').order('created_at', { ascending: false }),
@@ -97,6 +98,7 @@ function AdminPanel() {
       supabase.from('posts').select('id, content, post_type, created_at, user_id, profiles(display_name, full_name)').order('created_at', { ascending: false }).limit(50),
       supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(50),
       supabase.from('tasks').select('*, task_submissions(id, status)').order('created_at', { ascending: false }),
+      supabase.from('admin_notifications').select('*').eq('is_read', false).order('created_at', { ascending: false }).limit(20),
     ])
 
     setUsers(usersRes.data || [])
@@ -106,6 +108,7 @@ function AdminPanel() {
     setPosts(postsRes.data || [])
     setTransactions(txRes.data || [])
     setTasks(tasksRes.data || [])
+    setNotifications(notifRes?.data || [])
 
     // Stats
     const totalRevenue = (txRes.data || []).filter(t => t.type === 'topup').reduce((sum, t) => sum + (t.naira_amount || 0), 0)
@@ -123,6 +126,7 @@ function AdminPanel() {
   async function approveVerification(id, userId, profession) {
     await supabase.from('verification_requests').update({ status: 'approved' }).eq('id', id)
     await supabase.from('profiles').update({ is_verified: true, verification_label: profession, specialty: profession }).eq('id', userId)
+    await supabase.from('admin_notifications').insert({ type: 'verification', title: 'Verification Approved', message: `${profession} verification approved`, team_role: 'verification_officer' })
     loadAll()
   }
 
@@ -212,6 +216,14 @@ function AdminPanel() {
     )
   }
 
+  const role = adminUser?.role || 'moderator'
+  const isSuperAdmin = role === 'super_admin'
+  const canVerify = isSuperAdmin || role === 'verification_officer'
+  const canModerate = isSuperAdmin || role === 'moderator' || role === 'content_manager'
+  const canManageBiz = isSuperAdmin || role === 'business_manager'
+  const canSupport = isSuperAdmin || role === 'support_agent'
+  const canAnalytics = isSuperAdmin || role === 'analytics_manager'
+
   const TABS = [
     { key: 'overview', label: '📊 Overview' },
     { key: 'verifications', label: `🩺 Verify (${stats.pendingVerifs || 0})` },
@@ -222,7 +234,8 @@ function AdminPanel() {
     { key: 'transactions', label: '💰 Revenue' },
     { key: 'drugs', label: '💊 Drug Intel' },
     { key: 'tasks', label: '📋 Tasks' },
-    { key: 'staff', label: '👨‍💼 Staff' },
+    { key: 'teams', label: '👥 Teams' },
+    { key: 'notifications', label: `🔔 Alerts (${notifications.filter(n => !n.is_read).length})` },
   ]
 
   return (
