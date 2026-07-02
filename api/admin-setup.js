@@ -1,4 +1,3 @@
-import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -6,16 +5,25 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+async function hashPassword(password) {
+  const salt = process.env.ADMIN_SECRET_SALT || 'carefind_admin_2024_secure'
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + salt)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 export default async function handler(req, res) {
-  // One-time setup endpoint - creates super admin account
   const setupKey = req.query.key
-  if (setupKey !== process.env.ADMIN_SECRET_SALT) {
+  const expectedKey = process.env.ADMIN_SECRET_SALT || 'carefind_admin_2024_secure'
+
+  if (setupKey !== expectedKey) {
     return res.status(403).json({ error: 'Invalid setup key' })
   }
 
   const email = 'admin@carefind.ng'
   const password = 'CareFind@Admin2024!'
-  const hash = crypto.createHash('sha256').update(password + process.env.ADMIN_SECRET_SALT).digest('hex')
 
   const { data: existing } = await supabase
     .from('admin_users')
@@ -23,8 +31,11 @@ export default async function handler(req, res) {
     .eq('email', email)
     .maybeSingle()
 
+  const hash = await hashPassword(password)
+
   if (existing) {
-    return res.status(200).json({ message: 'Super admin already exists', email })
+    await supabase.from('admin_users').update({ password_hash: hash, role: 'super_admin', is_active: true }).eq('email', email)
+    return res.status(200).json({ message: 'Super admin updated', email, password })
   }
 
   const { error } = await supabase.from('admin_users').insert({
@@ -39,11 +50,9 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     success: true,
-    message: 'Super admin created successfully',
-    credentials: {
-      email: 'admin@carefind.ng',
-      password: 'CareFind@Admin2024!',
-      note: 'Change this password after first login'
-    }
+    message: 'Super admin created!',
+    email,
+    password,
+    login_url: 'https://carefind-nine.vercel.app/admin-login'
   })
 }
