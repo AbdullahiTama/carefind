@@ -17,8 +17,8 @@ import ProfessionalDashboard from './ProfessionalDashboard.jsx'
 import DrugProfile from './DrugProfile.jsx'
 import Wallet from './Wallet.jsx'
 import ProfessionalMonetization from './ProfessionalMonetization.jsx'
-const AdminPanel = React.lazy(() => import('./AdminPanel.jsx'))
-const AdminLogin = React.lazy(() => import('./AdminLogin.jsx'))
+import AdminPanel from './AdminPanel.jsx'
+import AdminLogin from './AdminLogin.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -40,9 +40,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/drug/:name" element={<DrugProfile />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/earn" element={<ProfessionalMonetization />} />
-          <Route path="/admin" element={<React.Suspense fallback={<div style={{padding:20}}>Loading...</div>}><AdminPanel /></React.Suspense>} />
-          <Route path="/admin-login" element={<React.Suspense fallback={<div style={{padding:20}}>Loading...</div>}><AdminLogin /></React.Suspense>} />
-          <Route path="/admin-panel" element={<React.Suspense fallback={<div style={{padding:20}}>Loading...</div>}><AdminPanel /></React.Suspense>} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/admin-panel" element={<AdminPanel />} />
+          <Route path="/admin" element={<AdminPanel />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
