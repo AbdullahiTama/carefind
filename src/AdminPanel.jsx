@@ -102,11 +102,13 @@ export default function AdminPanel() {
   }, [])
 
   async function loadAll() {
-    // Load posts separately to avoid one failure killing everything
+    // Load posts and profiles separately to isolate any failures
     const postsRes = await supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50)
+    const usersRes2 = await supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at, location, bio, avatar_url').order('created_at', { ascending: false }).limit(100)
+    if (usersRes2.data) setUsers(usersRes2.data)
     
     const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes, bizRes] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at, location, bio, avatar_url').order('created_at', { ascending: false }).limit(100),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
       supabase.from('reports').select('*, posts(content)').order('created_at', { ascending: false }).limit(30),
@@ -148,7 +150,7 @@ export default function AdminPanel() {
     const openReports = (reportsRes.data || []).filter(r => r.status === 'pending').length
 
     setStats({
-      users: usersRes.data?.length || 0,
+      users: usersRes2.data?.length || 0,
       posts: postsRes.data?.length || 0,
       pendingVerifs,
       pendingClaims,
