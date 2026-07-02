@@ -1,10 +1,10 @@
-import React, { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
-const AdminStaff = React.lazy(() => import('./AdminStaff.jsx'))
-const AdminTeams = React.lazy(() => import('./AdminTeams.jsx'))
+import AdminStaff from './AdminStaff.jsx'
+import AdminTeams from './AdminTeams.jsx'
 
 function AdminPanel() {
   const { user, loading: authLoading } = useAuth()
