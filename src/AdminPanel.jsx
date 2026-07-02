@@ -106,7 +106,7 @@ export default function AdminPanel() {
     const postsRes = await supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50)
     
     const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes, bizRes] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at, location, bio, is_admin, avatar_url').order('created_at', { ascending: false }).limit(100),
+      supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at, location, bio, avatar_url').order('created_at', { ascending: false }).limit(100),
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
       supabase.from('reports').select('*, posts(content)').order('created_at', { ascending: false }).limit(30),
@@ -544,7 +544,7 @@ export default function AdminPanel() {
                 </div>
 
                 {/* Delete */}
-                {!selectedUser.is_admin && (
+                {selectedUser.id !== adminUser?.id && (
                   <button onClick={() => deleteUser(selectedUser.id)} disabled={deletingUser} style={{ width: '100%', padding: 10, background: '#fef2f2', color: theme.alert, border: `1px solid #fca5a5`, borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
                     {deletingUser ? 'Deleting...' : '🗑️ Permanently Delete Account'}
                   </button>
