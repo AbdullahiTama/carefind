@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
+
+function hashPassword(password) {
+  return `cf_hashed_${password}`
+}
+
+function generateToken(adminId, role) {
+  const payload = `${adminId}|${role}|${Date.now()}`
+  return btoa(payload)
+}
 
 function AdminLogin() {
   const [email, setEmail] = useState('')
@@ -20,22 +30,32 @@ function AdminLogin() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/admin-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', email, password }),
-      })
-      const data = await res.json()
+      const hash = hashPassword(password)
+      const { data: admin, error: dbError } = await supabase
+        .from('admin_users')
+        .select('id, email, full_name, role, is_active')
+        .eq('email', email.toLowerCase())
+        .eq('password_hash', hash)
+        .eq('is_active', true)
+        .maybeSingle()
 
-      if (!res.ok) {
-        setError(data.error || 'Login failed')
-      } else {
-        localStorage.setItem('admin_token', data.token)
-        localStorage.setItem('admin_user', JSON.stringify(data.admin))
-        navigate('/admin-panel')
+      if (dbError || !admin) {
+        setError('Invalid email or password')
+        setLoading(false)
+        return
       }
-    } catch {
-      setError('Network error. Please try again.')
+
+      // Update last login
+      await supabase.from('admin_users').update({ last_login: new Date().toISOString() }).eq('id', admin.id)
+
+      // Store session
+      const token = generateToken(admin.id, admin.role)
+      localStorage.setItem('admin_token', token)
+      localStorage.setItem('admin_user', JSON.stringify(admin))
+
+      navigate('/admin-panel')
+    } catch (err) {
+      setError('Something went wrong. Please try again.')
     }
     setLoading(false)
   }
@@ -53,25 +73,13 @@ function AdminLogin() {
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Admin Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@carefind.ng"
-                required
-                style={{ width: '100%', padding: 13, fontSize: 14, background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', outline: 'none' }}
-              />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@carefind.ng" required
+                style={{ width: '100%', padding: 13, fontSize: 14, background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', outline: 'none' }} />
             </div>
             <div>
               <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{ width: '100%', padding: 13, fontSize: 14, background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', outline: 'none' }}
-              />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required
+                style={{ width: '100%', padding: 13, fontSize: 14, background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', outline: 'none' }} />
             </div>
 
             {error && (
