@@ -24,6 +24,9 @@ function Login() {
 
     if (authError) {
       setError(authError.message)
+    } else if (isSignUp) {
+      // New users go to onboarding to complete their profile
+      navigate('/onboarding')
     } else {
       navigate('/')
     }
