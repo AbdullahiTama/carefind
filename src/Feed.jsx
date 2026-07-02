@@ -44,6 +44,8 @@ function Feed() {
   const [reviewSearch, setReviewSearch] = useState('')
   const [reviewSearchResults, setReviewSearchResults] = useState([])
   const [reviewSearching, setReviewSearching] = useState(false)
+  const [profileComplete, setProfileComplete] = useState(true)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
   const themeLabels = {
     'teal-depth': '🌊 Ocean',
@@ -88,6 +90,17 @@ function Feed() {
     setReviewSearching(false)
   }
 
+  async function checkProfileComplete() {
+    if (!user) { setProfileComplete(true); return }
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, display_name, phone')
+      .eq('id', user.id)
+      .maybeSingle()
+    const complete = !!(data && data.full_name && data.display_name && data.phone)
+    setProfileComplete(complete)
+  }
+
   async function loadFeed() {
     setLoading(true)
     const { data: postData, error } = await supabase
@@ -116,7 +129,7 @@ function Feed() {
       const userIds = [...new Set((postData || []).map((p) => p.user_id))]
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, display_name, full_name, avatar_url, is_verified, verification_label, specialty')
+        .select('id, display_name, full_name, is_verified, verification_label, specialty')
         .in('id', userIds)
 
       const profileMap = {}
@@ -159,7 +172,8 @@ function Feed() {
 
   useEffect(() => {
     loadFeed()
-  }, [])
+    checkProfileComplete()
+  }, [user])
 
   function handleImageSelect(e) {
     const file = e.target.files[0]
@@ -281,7 +295,7 @@ function Feed() {
     setEditingComment(null)
     const { data } = await supabase
       .from('post_comments')
-      .select('id, content, created_at, user_id, profiles(id, display_name, full_name, avatar_url, is_verified, specialty)')
+      .select('id, content, created_at, user_id, profiles(id, display_name, full_name, is_verified, specialty)')
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
     setComments((prev) => ({ ...prev, [postId]: data || [] }))
@@ -452,6 +466,29 @@ function Feed() {
           🔍 Search medication, pharmacy, clinic...
         </Link>
       </div>
+
+      {/* Complete-your-profile banner */}
+      {user && !profileComplete && !bannerDismissed && (
+        <Link to="/onboarding" style={{ textDecoration: 'none' }}>
+          <div style={{
+            marginTop: 16, background: '#ecfdf5', border: `1px solid ${theme.tealBright}`, borderRadius: 14,
+            padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 20 }}>👋</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 1px 0', fontSize: 13, fontWeight: 800, color: theme.tealDeep }}>Complete your profile</p>
+              <p style={{ margin: 0, fontSize: 11.5, color: theme.textMid }}>Add your name, username and phone to get the most out of CareFind</p>
+            </div>
+            <span style={{ color: theme.tealDeep, fontSize: 18, fontWeight: 800 }}>›</span>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBannerDismissed(true) }}
+              style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: 16, padding: '0 2px' }}
+            >
+              ✕
+            </button>
+          </div>
+        </Link>
+      )}
 
       {user ? (
         <form ref={composerRef} id="post-composer" onSubmit={handlePost} style={{
@@ -698,13 +735,12 @@ function Feed() {
                 <div
                   style={{
                     width: 38, height: 38, borderRadius: '50%',
-                    background: profiles[post.user_id]?.avatar_url ? `url(${profiles[post.user_id].avatar_url})` : theme.tealGradient,
-                    backgroundSize: 'cover', backgroundPosition: 'center',
+                    background: theme.tealGradient,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0,
                   }}
                 >
-                  {!profiles[post.user_id]?.avatar_url && (profiles[post.user_id]?.display_name?.[0]?.toUpperCase() || '?')}
+                  {(profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase()}
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -718,12 +754,17 @@ function Feed() {
                       }}>✓</span>
                     )}
                   </div>
+                  {profiles[post.user_id]?.display_name && (
+                    <span style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 600, display: 'block' }}>
+                      @{profiles[post.user_id].display_name}
+                    </span>
+                  )}
                   {profiles[post.user_id]?.is_verified && (profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label) && (
                     <span style={{ fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>
                       ✓ {profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label}
                     </span>
                   )}
-                  <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600 }}>{timeAgo(post.created_at)}</span>
+                  <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600, display: 'block' }}>{timeAgo(post.created_at)}</span>
                 </div>
               </Link>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -929,12 +970,11 @@ function Feed() {
                     <Link to={`/u/${c.user_id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
                       <div style={{
                         width: 30, height: 30, borderRadius: '50%',
-                        background: c.profiles?.avatar_url ? `url(${c.profiles.avatar_url})` : theme.tealGradient,
-                        backgroundSize: 'cover', backgroundPosition: 'center',
+                        background: theme.tealGradient,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontSize: 11, fontWeight: 800,
                       }}>
-                        {!c.profiles?.avatar_url && (c.profiles?.full_name || c.profiles?.display_name || '?')[0]?.toUpperCase()}
+                        {(c.profiles?.full_name || c.profiles?.display_name || '?')[0]?.toUpperCase()}
                       </div>
                     </Link>
                     <div style={{ flex: 1, background: theme.bg, borderRadius: 12, padding: '8px 10px' }}>
