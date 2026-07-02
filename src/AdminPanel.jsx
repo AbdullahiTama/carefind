@@ -68,7 +68,13 @@ export default function AdminPanel() {
         navigate('/admin')
         return
       }
-      setAdminUser(JSON.parse(userData))
+      const parsedAdmin = JSON.parse(userData)
+      setAdminUser(parsedAdmin)
+      // Sign in anonymously so Supabase client can make authenticated requests
+      const { data: anonSession } = await supabase.auth.getSession()
+      if (!anonSession.session) {
+        await supabase.auth.signInAnonymously().catch(() => {})
+      }
       loadAll()
     } catch { navigate('/admin') }
 
@@ -85,7 +91,7 @@ export default function AdminPanel() {
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
       supabase.from('reports').select('*, posts(content)').order('created_at', { ascending: false }).limit(30),
-      supabase.from('posts').select('id, content, post_type, created_at, user_id, profiles(display_name, full_name)').order('created_at', { ascending: false }).limit(50),
+      supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50),
       supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(50),
       supabase.from('tasks').select('*').order('created_at', { ascending: false }),
       supabase.from('admin_teams').select('*').order('created_at'),
@@ -464,7 +470,7 @@ export default function AdminPanel() {
                   <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{p.post_type}</span>
                   <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(p.created_at)}</span>
                 </div>
-                <p style={{ margin: '0 0 4px 0', fontSize: 12, color: theme.textLight }}>{p.profiles?.full_name || p.profiles?.display_name || 'User'}</p>
+                <p style={{ margin: '0 0 4px 0', fontSize: 12, color: theme.textLight }}>User ID: {p.user_id?.slice(0,8)}...</p>
                 <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textMid }}>{p.content?.slice(0, 150)}</p>
                 <button onClick={() => deletePost(p.id)} style={{ padding: '6px 12px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️ Delete</button>
               </div>
