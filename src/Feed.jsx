@@ -7,6 +7,7 @@ import { theme } from './lib/theme'
 import { wrapBold, wrapItalic, wrapHighlight, renderArticleHtml } from './lib/articleFormat'
 import GiftPanel from './GiftPanel.jsx'
 import VisualCard from './VisualCard.jsx'
+import ArticleEditor from './ArticleEditor.jsx'
 import { useRef } from 'react'
 
 function Feed() {
@@ -611,69 +612,25 @@ function Feed() {
             </div>
           ) : (
             <>
-              {postType === 'article' && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => wrapBold(articleTextareaRef, content, setContent)}
-                      style={{
-                        padding: '5px 12px', borderRadius: 8, border: `1px solid ${theme.border}`,
-                        background: theme.bg, fontWeight: 800, fontSize: 13, color: theme.textMid,
-                      }}
-                    >
-                      B
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => wrapItalic(articleTextareaRef, content, setContent)}
-                      style={{
-                        padding: '5px 13px', borderRadius: 8, border: `1px solid ${theme.border}`,
-                        background: theme.bg, fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: theme.textMid,
-                      }}
-                    >
-                      I
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => wrapHighlight(articleTextareaRef, content, setContent, highlightColor)}
-                      style={{
-                        padding: '5px 12px', borderRadius: 8, border: `1px solid ${theme.border}`,
-                        background: highlightColor, fontWeight: 700, fontSize: 12, color: '#1f2937',
-                      }}
-                    >
-                      Highlight
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, color: theme.textLight, marginRight: 2 }}>Color:</span>
-                    {['#fde68a', '#a7f3d0', '#bfdbfe', '#fbcfe8', '#fecaca', '#ddd6fe'].map((c) => (
-                      <button
-                        type="button"
-                        key={c}
-                        onClick={() => setHighlightColor(c)}
-                        style={{
-                          width: 20, height: 20, borderRadius: '50%', background: c,
-                          border: highlightColor === c ? '2px solid #333' : '1px solid #ccc',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
+              {postType === 'article' ? (
+                <ArticleEditor
+                  value={content}
+                  onChange={(val) => setContent(val)}
+                />
+              ) : (
+                <textarea
+                  ref={postType === 'article' ? articleTextareaRef : null}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder={
+                    postType === 'question' ? 'Ask your question...' :
+                    postType === 'review' ? 'Share your experience with this product or service...' :
+                    'Share a health tip, ask a question...'
+                  }
+                  rows={3}
+                  style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: 'inherit' }}
+                />
               )}
-              <textarea
-                ref={postType === 'article' ? articleTextareaRef : null}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={
-                  postType === 'question' ? 'Ask your question...' :
-                  postType === 'review' ? 'Share your experience with this product or service...' :
-                  postType === 'article' ? 'Write your article... (separate paragraphs with a blank line)' :
-                  'Share a health tip, ask a question...'
-                }
-                rows={postType === 'article' ? 10 : 3}
-                style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: 'inherit' }}
-              />
             </>
           )}
 
@@ -861,11 +818,9 @@ function Feed() {
                     </div>
                   </div>
                 ) : post.post_type === 'article' || post.post_type === 'premium' ? (
-                  <div
-                    className="article-body"
-                    style={{ margin: '10px 0 12px 0', fontSize: 15, color: theme.textDark, lineHeight: 1.75, fontFamily: 'Georgia, "Times New Roman", serif' }}
-                    dangerouslySetInnerHTML={{ __html: renderArticleHtml(post.content) }}
-                  />
+                  <div style={{ margin: '10px 0 12px 0' }}>
+                    <ArticleEditor value={post.content} readOnly />
+                  </div>
                 ) : (
                   <p style={{ margin: '8px 0 10px 0', whiteSpace: 'pre-wrap', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{post.content}</p>
                 )}
