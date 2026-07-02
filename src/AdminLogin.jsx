@@ -20,8 +20,23 @@ function AdminLogin() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const token = localStorage.getItem('admin_token')
-    if (token) navigate('/admin-panel')
+    // Only redirect if token is valid and not expired
+    try {
+      const token = localStorage.getItem('admin_token')
+      if (token) {
+        const decoded = atob(token)
+        const parts = decoded.split('|')
+        if (parts.length === 3 && Date.now() - parseInt(parts[2]) < 86400000) {
+          navigate('/admin-panel')
+        } else {
+          localStorage.removeItem('admin_token')
+          localStorage.removeItem('admin_user')
+        }
+      }
+    } catch {
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_user')
+    }
   }, [])
 
   async function handleLogin(e) {
