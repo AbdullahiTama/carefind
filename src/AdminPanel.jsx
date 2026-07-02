@@ -204,16 +204,16 @@ function AdminPanel() {
     return `${Math.floor(diff/86400)}d ago`
   }
 
-  if (authLoading || loading) return <div style={{ padding: 20, fontFamily: 'system-ui' }}>Loading...</div>
+  if (authLoading || loading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui' }}>
+      <p style={{ color: '#64748b', fontSize: 14 }}>Loading admin panel...</p>
+    </div>
+  )
 
-  if (!user || !isAdmin) {
-    return (
-      <div style={{ padding: 40, fontFamily: 'system-ui', textAlign: 'center' }}>
-        <h2 style={{ color: '#dc2626' }}>Access Denied</h2>
-        <p style={{ color: '#666' }}>This page is only accessible to platform administrators.</p>
-        <Link to="/" style={{ color: '#0f766e', fontWeight: 700 }}>← Back to CareFind</Link>
-      </div>
-    )
+  if (!isAdmin) {
+    // Redirect to admin login instead of showing access denied
+    navigate('/admin-login')
+    return null
   }
 
   const role = adminUser?.role || 'moderator'
