@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
 
 const ROLES = ['moderator', 'verification_officer', 'support', 'content_manager']
@@ -10,7 +11,11 @@ const ROLE_LABELS = {
   content_manager: '📝 Content Manager',
 }
 
-function AdminStaff({ token }) {
+function hashPassword(password) {
+  return `cf_hashed_${password}`
+}
+
+function AdminStaff({ adminUser }) {
   const [staff, setStaff] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -23,13 +28,8 @@ function AdminStaff({ token }) {
 
   async function loadStaff() {
     setLoading(true)
-    const res = await fetch('/api/admin-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'list_staff', token }),
-    })
-    const data = await res.json()
-    setStaff(data.staff || [])
+    const { data } = await supabase.from('admin_users').select('id, email, full_name, role, is_active, last_login, created_at').order('created_at')
+    setStaff(data || [])
     setLoading(false)
   }
 
@@ -37,29 +37,27 @@ function AdminStaff({ token }) {
     e.preventDefault()
     setError(''); setSuccess('')
     setSaving(true)
-    const res = await fetch('/api/admin-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create_staff', token, newEmail: form.email, newPassword: form.password, newName: form.name, newRole: form.role }),
+    const hash = hashPassword(form.password)
+    const { error: insertError } = await supabase.from('admin_users').insert({
+      email: form.email.toLowerCase(),
+      password_hash: hash,
+      full_name: form.name,
+      role: form.role,
+      created_by: adminUser?.id,
     })
-    const data = await res.json()
-    if (data.success) {
+    if (insertError) {
+      setError(insertError.message)
+    } else {
       setSuccess(`Staff account created for ${form.email}`)
       setForm({ email: '', password: '', name: '', role: 'moderator' })
       setCreating(false)
       loadStaff()
-    } else {
-      setError(data.error || 'Failed to create account')
     }
     setSaving(false)
   }
 
   async function toggleStaff(staffId, isActive) {
-    await fetch('/api/admin-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'toggle_staff', token, staffId, isActive }),
-    })
+    await supabase.from('admin_users').update({ is_active: isActive }).eq('id', staffId)
     loadStaff()
   }
 
@@ -100,15 +98,6 @@ function AdminStaff({ token }) {
               style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10, background: '#fff' }}>
               {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </select>
-          </div>
-          <div style={{ background: '#fef9c3', borderRadius: 10, padding: 10 }}>
-            <p style={{ margin: 0, fontSize: 11.5, color: '#92400e' }}>
-              <strong>Role permissions:</strong><br/>
-              🛡️ Moderator — reports & posts<br/>
-              🩺 Verification Officer — verify professionals & claims<br/>
-              💬 Support — view users & transactions<br/>
-              📝 Content Manager — posts & tasks
-            </p>
           </div>
           {error && <p style={{ color: theme.alert, fontSize: 13, margin: 0 }}>{error}</p>}
           {success && <p style={{ color: theme.success, fontSize: 13, margin: 0 }}>✓ {success}</p>}
