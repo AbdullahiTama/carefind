@@ -3,11 +3,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
+import AdminStaff from './AdminStaff.jsx'
 
 function AdminPanel() {
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [adminToken, setAdminToken] = useState(null)
+  const [adminUser, setAdminUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('overview')
 
@@ -49,6 +52,31 @@ function AdminPanel() {
 
   useEffect(() => {
     async function init() {
+      // Check for admin token first (separate admin login)
+      const token = localStorage.getItem('admin_token')
+      const adminUserData = localStorage.getItem('admin_user')
+      if (token && adminUserData) {
+        try {
+          const res = await fetch('/api/admin-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verify', token }),
+          })
+          const data = await res.json()
+          if (data.admin) {
+            setAdminToken(token)
+            setAdminUser(data.admin)
+            setIsAdmin(true)
+            await loadAll()
+            setLoading(false)
+            return
+          }
+        } catch {}
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
+      }
+
+      // Fall back to checking supabase is_admin flag
       if (!user) { setLoading(false); return }
       const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
       if (!profile?.is_admin) { setLoading(false); return }
@@ -193,6 +221,7 @@ function AdminPanel() {
     { key: 'transactions', label: '💰 Revenue' },
     { key: 'drugs', label: '💊 Drug Intel' },
     { key: 'tasks', label: '📋 Tasks' },
+    { key: 'staff', label: '👨‍💼 Staff' },
   ]
 
   return (
