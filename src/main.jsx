@@ -18,6 +18,7 @@ import DrugProfile from './DrugProfile.jsx'
 import Wallet from './Wallet.jsx'
 import ProfessionalMonetization from './ProfessionalMonetization.jsx'
 import AdminPanel from './AdminPanel.jsx'
+import AdminLogin from './AdminLogin.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -40,6 +41,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/earn" element={<ProfessionalMonetization />} />
           <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/admin-panel" element={<AdminPanel />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
