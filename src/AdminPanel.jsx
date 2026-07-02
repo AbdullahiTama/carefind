@@ -42,6 +42,10 @@ export default function AdminPanel() {
   const [userVerifiedFilter, setUserVerifiedFilter] = useState('all')
   const [userSpecialtyFilter, setUserSpecialtyFilter] = useState('')
   const [reportStatusFilter, setReportStatusFilter] = useState('pending')
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [suspendDays, setSuspendDays] = useState('7')
+  const [userPosts, setUserPosts] = useState([])
+  const [deletingUser, setDeletingUser] = useState(false)
   const [businesses, setBusinesses] = useState([])
   const [bizSearch, setBizSearch] = useState('')
   const [bizTypeFilter, setBizTypeFilter] = useState('all')
@@ -102,7 +106,7 @@ export default function AdminPanel() {
     const postsRes = await supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50)
     
     const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes, bizRes] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at, location, bio, is_admin, avatar_url').order('created_at', { ascending: false }).limit(100),
       supabase.from('verification_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('business_claims').select('*, businesses(name)').order('created_at', { ascending: false }),
       supabase.from('reports').select('*, posts(content)').order('created_at', { ascending: false }).limit(30),
@@ -171,6 +175,36 @@ export default function AdminPanel() {
     else setRoleNotifCount(0)
 
     setLoading(false)
+  }
+
+  async function viewUserDetails(u) {
+    setSelectedUser(u)
+    const { data } = await supabase.from('posts').select('id, content, post_type, created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(10)
+    setUserPosts(data || [])
+  }
+
+  async function suspendUser(userId, days) {
+    const suspendedUntil = new Date(Date.now() + parseInt(days) * 86400000).toISOString()
+    await supabase.from('profiles').update({ suspended_until: suspendedUntil, is_verified: false }).eq('id', userId)
+    setSelectedUser(null)
+    loadAll()
+    alert(`User suspended for ${days} days`)
+  }
+
+  async function deleteUser(userId) {
+    if (!window.confirm('Permanently delete this user and all their content? This CANNOT be undone.')) return
+    setDeletingUser(true)
+    // Delete user's posts, comments, reactions
+    await supabase.from('post_reactions').delete().eq('user_id', userId)
+    await supabase.from('post_comments').delete().eq('user_id', userId)
+    await supabase.from('saved_posts').delete().eq('user_id', userId)
+    await supabase.from('follows').delete().eq('follower_id', userId)
+    await supabase.from('follows').delete().eq('following_id', userId)
+    await supabase.from('posts').delete().eq('user_id', userId)
+    await supabase.from('profiles').delete().eq('id', userId)
+    setSelectedUser(null)
+    setDeletingUser(false)
+    loadAll()
   }
 
   async function approveVerif(id, userId, profession) {
@@ -446,9 +480,95 @@ export default function AdminPanel() {
 
         {tab === 'users' && (
           <div>
+            {/* User Detail Modal */}
+            {selectedUser && (
+              <div style={{ border: `1px solid ${theme.tealBright}`, borderRadius: 16, padding: 16, background: '#ecfdf5', marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: theme.navy }}>👤 User Details</h3>
+                  <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: theme.textLight }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ width: 50, height: 50, borderRadius: '50%', background: selectedUser.avatar_url ? `url(${selectedUser.avatar_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 800, flexShrink: 0 }}>
+                    {!selectedUser.avatar_url && (selectedUser.full_name || selectedUser.display_name || '?')[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <p style={{ margin: '0 0 2px 0', fontWeight: 900, fontSize: 15, color: theme.navy }}>{selectedUser.full_name || 'No full name'}</p>
+                    {selectedUser.display_name && <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>@{selectedUser.display_name}</p>}
+                  </div>
+                </div>
+                <div style={{ background: '#fff', borderRadius: 12, padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    { label: 'User ID', value: selectedUser.id?.slice(0, 16) + '...' },
+                    { label: 'Specialty', value: selectedUser.specialty || 'Not set' },
+                    { label: 'Location', value: selectedUser.location || 'Not set' },
+                    { label: 'Verified', value: selectedUser.is_verified ? '✓ Yes' : 'No' },
+                    { label: 'Joined', value: new Date(selectedUser.created_at).toLocaleDateString() },
+                    { label: 'Posts', value: userPosts.length },
+                  ].map(f => (
+                    <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 700 }}>{f.label}</span>
+                      <span style={{ fontSize: 12, color: theme.navy, fontWeight: 600 }}>{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedUser.bio && <p style={{ margin: '0 0 12px 0', fontSize: 13, color: theme.textMid, fontStyle: 'italic' }}>"{selectedUser.bio}"</p>}
+
+                {/* Verify */}
+                {!selectedUser.is_verified && (
+                  verifyingUser === selectedUser.id ? (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <input value={verifySpecialty} onChange={(e) => setVerifySpecialty(e.target.value)} placeholder="Specialty (e.g. Pharmacist)" style={{ flex: 1, padding: '8px 10px', fontSize: 13, border: `1px solid ${theme.tealDeep}`, borderRadius: 10 }} />
+                      <button onClick={() => manualVerify(selectedUser.id, verifySpecialty)} style={{ padding: '8px 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700 }}>✓ Verify</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setVerifyingUser(selectedUser.id)} style={{ width: '100%', padding: 9, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
+                      ✓ Verify This User
+                    </button>
+                  )
+                )}
+
+                {/* Suspend */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <select value={suspendDays} onChange={(e) => setSuspendDays(e.target.value)} style={{ flex: 1, padding: 9, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10, background: '#fff' }}>
+                    <option value="1">Suspend 1 day</option>
+                    <option value="3">Suspend 3 days</option>
+                    <option value="7">Suspend 7 days</option>
+                    <option value="14">Suspend 14 days</option>
+                    <option value="30">Suspend 30 days</option>
+                    <option value="365">Suspend 1 year</option>
+                  </select>
+                  <button onClick={() => suspendUser(selectedUser.id, suspendDays)} style={{ flex: 1, padding: 9, background: '#fef3c7', color: '#92400e', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>
+                    ⏸ Suspend
+                  </button>
+                </div>
+
+                {/* Delete */}
+                {!selectedUser.is_admin && (
+                  <button onClick={() => deleteUser(selectedUser.id)} disabled={deletingUser} style={{ width: '100%', padding: 10, background: '#fef2f2', color: theme.alert, border: `1px solid #fca5a5`, borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
+                    {deletingUser ? 'Deleting...' : '🗑️ Permanently Delete Account'}
+                  </button>
+                )}
+
+                {/* Recent posts */}
+                {userPosts.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <p style={{ fontSize: 11, fontWeight: 800, color: theme.textLight, textTransform: 'uppercase', margin: '0 0 8px 0' }}>Recent Posts ({userPosts.length})</p>
+                    {userPosts.slice(0, 3).map(p => (
+                      <div key={p.id} style={{ padding: '8px 0', borderTop: `1px solid ${theme.border}` }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{p.post_type}</span>
+                        <p style={{ margin: '2px 0 0 0', fontSize: 12, color: theme.textMid }}>{p.content?.slice(0, 100)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Filter bar */}
             <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
               <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Filter Users</p>
-              <input type="text" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Search by name..." style={{ ...input, marginBottom: 8 }} />
+              <input type="text" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Search by name or username..." style={{ ...input, marginBottom: 8 }} />
               <input type="text" value={userSpecialtyFilter} onChange={(e) => setUserSpecialtyFilter(e.target.value)} placeholder="Filter by specialty..." style={{ ...input, marginBottom: 8 }} />
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 {['all','verified','unverified'].map(f => (
@@ -462,46 +582,35 @@ export default function AdminPanel() {
                   const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
                   return matchSearch && matchVerified && matchSpecialty
                 })
-                exportCSV(filtered, 'filtered_users.csv')
+                exportCSV(filtered, 'users_export.csv')
               }} style={{ width: '100%', padding: 8, background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 12 }}>Export Filtered CSV</button>
             </div>
-            {(() => {
-              const filtered = users.filter(u => {
-                const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
-                const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
-                const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
-                return matchSearch && matchVerified && matchSpecialty
-              })
-              return <p style={{ fontSize: 11, color: theme.textLight, margin: '0 0 8px 0' }}>{filtered.length} user{filtered.length !== 1 ? 's' : ''} found</p>
-            })()}
+
             {users.filter(u => {
               const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
               const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
               const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
               return matchSearch && matchVerified && matchSpecialty
             }).map(u => (
-              <div key={u.id} style={card}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                  <div>
-                    <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 13.5, color: theme.navy }}>{u.full_name || u.display_name || 'No name'}</p>
-                    {u.specialty && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.tealDeep, fontWeight: 700 }}>{u.specialty}</p>}
-                    <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{timeAgo(u.created_at)}</p>
+              <div key={u.id} style={{ ...card, cursor: 'pointer' }} onClick={() => viewUserDetails(u)}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: u.avatar_url ? `url(${u.avatar_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0 }}>
+                    {!u.avatar_url && (u.full_name || u.display_name || '?')[0]?.toUpperCase()}
                   </div>
-                  {u.is_verified && <span style={{ fontSize: 9.5, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 7px', borderRadius: 20 }}>✓ Verified</span>}
-                </div>
-                {!u.is_verified && (
-                  verifyingUser === u.id ? (
-                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                      <input value={verifySpecialty} onChange={(e) => setVerifySpecialty(e.target.value)} placeholder="Specialty (e.g. Pharmacist)" style={{ flex: 1, padding: '6px 8px', fontSize: 12, border: `1px solid ${theme.tealDeep}`, borderRadius: 8 }} />
-                      <button onClick={() => manualVerify(u.id, verifySpecialty)} style={{ padding: '6px 10px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>✓</button>
-                      <button onClick={() => { setVerifyingUser(null); setVerifySpecialty('') }} style={{ padding: '6px 8px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 11 }}>✕</button>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <p style={{ margin: '0 0 1px 0', fontWeight: 700, fontSize: 13.5, color: theme.navy }}>{u.full_name || u.display_name || 'No name'}</p>
+                      {u.is_verified && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 20 }}>✓</span>}
                     </div>
-                  ) : (
-                    <button onClick={() => setVerifyingUser(u.id)} style={{ padding: '6px 12px', background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
-                      ✓ Verify
-                    </button>
-                  )
-                )}
+                    {u.display_name && u.full_name && <p style={{ margin: '0 0 1px 0', fontSize: 11, color: theme.textLight }}>@{u.display_name}</p>}
+                    {u.specialty && <p style={{ margin: '0 0 1px 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>{u.specialty}</p>}
+                    {u.location && <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>📍 {u.location}</p>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: theme.textLight }}>{timeAgo(u.created_at)}</span>
+                    <span style={{ fontSize: 10, color: theme.tealDeep, fontWeight: 700 }}>Tap to manage →</span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
