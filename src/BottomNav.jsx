@@ -53,9 +53,9 @@ function BottomNav({ onCompose }) {
       >
         +
       </button>
-      <Link to="/" style={itemStyle(false)}>
-        <span style={{ fontSize: 19 }}>🔔</span>
-        Alerts
+      <Link to="/news" style={itemStyle(isActive('/news'))}>
+        <span style={{ fontSize: 19 }}>📰</span>
+        News
       </Link>
       <Link to="/profile" style={itemStyle(isActive('/profile'))}>
         <span style={{ fontSize: 19 }}>👤</span>
