@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
@@ -21,6 +21,27 @@ function Search() {
   const [professionals, setProfessionals] = useState([])
   const [loading, setLoading] = useState(false)
   const [featured, setFeatured] = useState([])
+  const trackRef = useRef(null)
+
+  // JS-driven marquee — works even in iOS Low Power Mode (CSS animations get paused, JS doesn't)
+  useEffect(() => {
+    if (featured.length === 0) return
+    let raf
+    let offset = 0
+    const speed = 0.4 // px per frame
+    function step() {
+      const el = trackRef.current
+      if (el) {
+        offset += speed
+        const half = el.scrollWidth / 2
+        if (offset >= half) offset = 0
+        el.style.transform = `translateX(${-offset}px)`
+      }
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [featured])
 
   useEffect(() => { loadFeatured() }, [])
   useEffect(() => { runSearch() }, [tab, stateFilter, specialtyFilter])
@@ -75,18 +96,9 @@ function Search() {
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
       <style>{`
         @keyframes medmarket-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .mm-track { display: flex; gap: 12px; width: max-content; animation: medmarket-scroll 30s linear infinite; }
-        .mm-track:active { animation-play-state: paused; }
-        @keyframes mm-fade-up {
-          from { opacity: 0; transform: translateY(14px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .mm-card {
-          animation: mm-fade-up 0.4s ease both;
-          transition: transform 0.12s ease, box-shadow 0.12s ease;
-        }
-        .mm-card:active { transform: scale(0.97); }
-        .mm-hero-in { animation: mm-fade-up 0.5s ease both; }
+        .mm-track { display: flex; gap: 12px; width: max-content; will-change: transform; }
+        .mm-card { transition: transform 0.12s ease; }
+        .mm-card:active { transform: scale(0.96); }
       `}</style>
 
       <div style={{ background: theme.heroGradient, padding: '24px 18px 22px', borderRadius: '0 0 26px 26px', color: '#fff' }}>
@@ -141,7 +153,7 @@ function Search() {
         <div style={{ padding: '14px 0 4px' }}>
           <p style={{ margin: '0 0 10px 16px', fontSize: 12, fontWeight: 900, color: theme.navy }}>✨ Featured on MedMarket</p>
           <div style={{ overflow: 'hidden', width: '100%' }}>
-            <div className="mm-track">
+            <div className="mm-track" ref={trackRef}>
               {[...featured, ...featured].map((p, i) => (
                 <Link key={i} className="mm-card" to={`/business/${p.business_id}`} style={{ animationDelay: '0s', textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
                   <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
