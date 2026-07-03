@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
+import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 
@@ -12,6 +13,7 @@ const NG_STATES = [
 ]
 
 function Search() {
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState('products')
   const [stateFilter, setStateFilter] = useState('')
@@ -21,6 +23,7 @@ function Search() {
   const [professionals, setProfessionals] = useState([])
   const [loading, setLoading] = useState(false)
   const [featured, setFeatured] = useState([])
+  const [featuredType, setFeaturedType] = useState('promo') // 'promo' or 'product'
   const trackRef = useRef(null)
 
   // JS-driven marquee — works even in iOS Low Power Mode (CSS animations get paused, JS doesn't)
@@ -53,13 +56,26 @@ function Search() {
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order('created_at', { ascending: false })
       .limit(20)
-    setFeatured(data || [])
+    if (data && data.length > 0) {
+      setFeatured(data)
+      setFeaturedType('promo')
+      return
+    }
+    // Fallback: auto-pull products if no active promotions
+    const { data: prods } = await supabase
+      .from('products')
+      .select('id, name, emoji, price, business_id, list_on_carefind, businesses(name)')
+      .order('created_at', { ascending: false })
+      .limit(14)
+    setFeatured((prods || []).filter(p => p.list_on_carefind !== false))
+    setFeaturedType('product')
   }
 
   async function runSearch(e) {
     if (e) e.preventDefault()
     setLoading(true)
     const q = query.trim()
+    let resultCount = 0
 
     if (tab === 'products') {
       let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, business_id, list_on_carefind, businesses(name, city, state)')
@@ -69,6 +85,7 @@ function Search() {
       if (stateFilter) list = list.filter(p => (p.businesses?.state || '').toLowerCase().includes(stateFilter.toLowerCase()))
       setProducts(list)
       setBusinesses([]); setProfessionals([])
+      resultCount = list.length
     }
     else if (tab === 'businesses') {
       let bq = supabase.from('businesses').select('id, name, business_type, city, state, cover_url, whatsapp').eq('visible_on_carefind', true)
@@ -77,6 +94,7 @@ function Search() {
       const { data } = await bq.limit(40)
       setBusinesses(data || [])
       setProducts([]); setProfessionals([])
+      resultCount = (data || []).length
     }
     else if (tab === 'professionals') {
       let pf = supabase.from('profiles').select('id, full_name, display_name, verification_label, specialty, location, is_verified').eq('is_verified', true)
@@ -86,9 +104,21 @@ function Search() {
       const { data } = await pf.limit(40)
       setProfessionals(data || [])
       setProducts([]); setBusinesses([])
+      resultCount = (data || []).length
     }
 
     setLoading(false)
+
+    // Log the search (query + category + user + whether anything was found)
+    if (q || stateFilter || specialtyFilter) {
+      supabase.from('search_logs').insert({
+        query: q || null,
+        category: tab,
+        user_id: user?.id || null,
+        results_count: resultCount,
+        found: resultCount > 0,
+      })
+    }
   }
 
   const showingFeatured = tab === 'products' && !query.trim()
@@ -152,20 +182,31 @@ function Search() {
 
       {showingFeatured && featured.length > 0 && (
         <div style={{ padding: '14px 0 4px' }}>
-          <p style={{ margin: '0 0 10px 16px', fontSize: 12, fontWeight: 900, color: theme.navy }}>✨ Featured Promotions</p>
+          <p style={{ margin: '0 0 10px 16px', fontSize: 12, fontWeight: 900, color: theme.navy }}>{featuredType === 'promo' ? '✨ Featured Promotions' : '✨ Featured on MedMarket'}</p>
           <div style={{ overflow: 'hidden', width: '100%' }}>
             <div className="mm-track" ref={trackRef}>
               {[...featured, ...featured].map((p, i) => (
-                <Link key={i} className="mm-card" to={p.link_url || '/search'} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 200 }}>
-                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', background: theme.cardBg }}>
-                    <div style={{ height: 110, background: p.image_url ? `url(${p.image_url})` : theme.heroGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'flex-start', padding: 8 }}>
-                      <span style={{ fontSize: 8.5, fontWeight: 900, letterSpacing: '0.06em', color: '#fff', background: theme.tealDeep, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Promo</span>
+                featuredType === 'promo' ? (
+                  <Link key={i} className="mm-card" to={p.link_url || '/search'} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 200 }}>
+                    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', background: theme.cardBg }}>
+                      <div style={{ height: 110, background: p.image_url ? `url(${p.image_url})` : theme.heroGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'flex-start', padding: 8 }}>
+                        <span style={{ fontSize: 8.5, fontWeight: 900, letterSpacing: '0.06em', color: '#fff', background: theme.tealDeep, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Promo</span>
+                      </div>
+                      <div style={{ padding: '9px 11px 12px' }}>
+                        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: theme.navy, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.title}</p>
+                      </div>
                     </div>
-                    <div style={{ padding: '9px 11px 12px' }}>
-                      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: theme.navy, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.title}</p>
+                  </Link>
+                ) : (
+                  <Link key={i} className="mm-card" to={`/business/${p.business_id}`} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
+                    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
+                      <div style={{ fontSize: 30, marginBottom: 6 }}>{p.emoji || '💊'}</div>
+                      <p style={{ margin: '0 0 3px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                      {p.price != null && <p style={{ margin: '0 0 2px 0', fontSize: 12, fontWeight: 700, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+                      <p style={{ margin: 0, fontSize: 10, color: theme.textLight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businesses?.name || ''}</p>
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                )
               ))}
             </div>
           </div>
