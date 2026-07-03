@@ -72,6 +72,7 @@ function DrawingBlock({ block, onChange, onDelete, readOnly }) {
   function startDraw(e) {
     if (readOnly) return
     e.preventDefault()
+    e.stopPropagation()
     setIsDrawing(true)
     const pt = getPoint(e)
     lastPoint.current = pt
@@ -89,6 +90,7 @@ function DrawingBlock({ block, onChange, onDelete, readOnly }) {
   function draw(e) {
     if (!isDrawing || readOnly) return
     e.preventDefault()
+    e.stopPropagation()
     const pt = getPoint(e)
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
@@ -108,6 +110,8 @@ function DrawingBlock({ block, onChange, onDelete, readOnly }) {
 
   function endDraw(e) {
     if (!isDrawing || readOnly) return
+    e.preventDefault()
+    e.stopPropagation()
     setIsDrawing(false)
     if (currentStroke.current.length < 2) return
     const newStroke = {
@@ -205,6 +209,17 @@ function DrawingBlock({ block, onChange, onDelete, readOnly }) {
             <p style={{ color: '#cbd5e1', fontSize: 13, fontWeight: 600 }}>✏️ Draw here — pen, sketch, or annotate</p>
           </div>
         )}
+      </div>
+      {/* Caption field */}
+      <div style={{ padding: '6px 10px 8px', borderTop: `1px solid ${theme.border}`, background: '#f8fafc' }}>
+        <input
+          type="text"
+          value={block.caption || ''}
+          onChange={e => onChange({ ...block, caption: e.target.value })}
+          readOnly={readOnly}
+          placeholder="Add a label or caption for this drawing..."
+          style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: `1px solid ${theme.border}`, borderRadius: 8, background: readOnly ? 'transparent' : '#fff', color: theme.textMid, fontFamily: 'inherit', boxSizing: 'border-box' }}
+        />
       </div>
     </div>
   )
