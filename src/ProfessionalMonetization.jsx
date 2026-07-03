@@ -174,6 +174,7 @@ function ProfessionalMonetization() {
               { icon: '📅', title: 'Consultations', desc: `${pendingConsults} pending booking${pendingConsults !== 1 ? 's' : ''}`, action: () => setTab('consultation') },
               { icon: '📋', title: 'Sponsored Tasks', desc: `${tasks.length} open task${tasks.length !== 1 ? 's' : ''} available`, action: () => setTab('tasks') },
               { icon: '💰', title: 'Gifts Received', desc: `${wallet?.balance || 0} CareCoins ≈ ₦${((wallet?.balance || 0) * 200).toLocaleString()}`, action: () => {} },
+              { icon: '🔴', title: 'Live Session Earnings', desc: 'Gifts from your live sessions — permanently recorded', action: () => {} },
             ].map((item) => (
               <button key={item.title} onClick={item.action} style={{
                 border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg,
