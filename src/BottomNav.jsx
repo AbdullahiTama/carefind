@@ -63,8 +63,8 @@ function BottomNav({ onCompose }) {
         Home
       </Link>
       <Link to="/search" style={itemStyle(isActive('/search'))}>
-        <span style={{ fontSize: 19 }}>🔍</span>
-        Search
+        <span style={{ fontSize: 19 }}>🛒</span>
+        MedMarket
       </Link>
       <button
         onClick={handleCompose}
