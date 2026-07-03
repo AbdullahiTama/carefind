@@ -108,7 +108,7 @@ function Feed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id, post_type, theme, image_url, rating')
+      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -168,6 +168,9 @@ function Feed() {
       })
       scored.sort((a, b) => b._score - a._score || new Date(b.created_at) - new Date(a.created_at))
       setPosts(scored)
+
+      // Count a view for each post shown (fire and forget)
+      scored.forEach((p) => { supabase.rpc('increment_post_view', { post_id: p.id }) })
 
       const { data: followData } = await supabase
         .from('follows')
@@ -456,6 +459,13 @@ function Feed() {
       setSavedPosts((prev) => [...prev, temp])
       supabase.from('saved_posts').insert({ user_id: user.id, post_id: postId })
     }
+  }
+
+  function formatCount(n) {
+    n = n || 0
+    if (n < 1000) return `${n}`
+    if (n < 1000000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`.replace('.0k', 'k')
+    return `${(n / 1000000).toFixed(1)}M`.replace('.0M', 'M')
   }
 
   function timeAgo(dateStr) {
@@ -949,96 +959,88 @@ function Feed() {
                 )}
               </>
             )}
-            {(likeCount(post.id) > 0 || (comments[post.id] && comments[post.id].length > 0)) && (
-              <div style={{
-                padding: post.post_type === 'visual' ? '6px 16px 0 16px' : '4px 0 0 0',
-                display: 'flex', gap: 12, alignItems: 'center',
-              }}>
-                {likeCount(post.id) > 0 && (
-                  <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>
-                    ❤️ {likeCount(post.id)} {likeCount(post.id) === 1 ? 'like' : 'likes'}
-                  </span>
-                )}
-                {comments[post.id] && comments[post.id].length > 0 && (
-                  <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>
-                    💬 {comments[post.id].length} {comments[post.id].length === 1 ? 'comment' : 'comments'}
-                  </span>
-                )}
-                {isSaved(post.id) && (
-                  <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>🔖 Saved</span>
-                )}
-              </div>
-            )}
-            <style>{`
-              .eng-btn { background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 0; flex: 1; -webkit-tap-highlight-color: transparent; transition: transform 0.08s; }
-              .eng-btn:active { transform: scale(0.82); }
-              .eng-btn svg { transition: transform 0.08s; }
-              .eng-btn:active svg { transform: scale(0.88); }
-            `}</style>
             <div style={{
+              padding: post.post_type === 'visual' ? '6px 16px 0 16px' : '4px 0 0 0',
+              display: 'flex', gap: 12, alignItems: 'center',
+            }}>
+              {likeCount(post.id) > 0 && (
+                <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>
+                  ❤️ {formatCount(likeCount(post.id))} {likeCount(post.id) === 1 ? 'like' : 'likes'}
+                </span>
+              )}
+              {comments[post.id] && comments[post.id].length > 0 && (
+                <span style={{ fontSize: 12, color: theme.textLight, fontWeight: 600 }}>
+                  💬 {comments[post.id].length}
+                </span>
+              )}
+            </div>
+            <style>{`
+              .eng-row { display: flex; align-items: center; justify-content: space-between; }
+              .eng-item { background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 10px 2px; -webkit-tap-highlight-color: transparent; transition: transform 0.08s; }
+              .eng-item:active { transform: scale(0.88); }
+              .eng-item span { font-size: 13px; font-weight: 600; }
+            `}</style>
+            <div className="eng-row" style={{
               borderTop: `1px solid ${theme.border}`, marginTop: 8,
               marginLeft: post.post_type === 'visual' ? 16 : 0, marginRight: post.post_type === 'visual' ? 16 : 0,
               marginBottom: post.post_type === 'visual' ? 16 : 0,
-              display: 'flex', justifyContent: 'space-around', alignItems: 'center',
+              paddingTop: 4,
             }}>
-              {/* Like */}
-              <button className="eng-btn" onPointerDown={() => {
-                toggleLike(post.id)
-                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 520; g.gain.setValueAtTime(0.08, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.08); o.start(); o.stop(a.currentTime + 0.08); } catch(e){}
-              }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill={userHasLiked(post.id) ? theme.tealDeep : 'none'} stroke={userHasLiked(post.id) ? theme.tealDeep : '#666'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-                <span style={{ fontSize: 11, color: userHasLiked(post.id) ? theme.tealDeep : '#666', fontWeight: 700 }}>{likeCount(post.id) || 'Like'}</span>
-              </button>
-
               {/* Comment */}
-              <button className="eng-btn" onPointerDown={() => {
-                toggleComments(post.id)
-                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 420; g.gain.setValueAtTime(0.06, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.07); o.start(); o.stop(a.currentTime + 0.07); } catch(e){}
-              }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-item" onClick={() => toggleComments(post.id)}>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#536471" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
-                <span style={{ fontSize: 11, color: '#666', fontWeight: 700 }}>{comments[post.id]?.length || 'Comment'}</span>
+                <span style={{ color: '#536471' }}>{comments[post.id]?.length ? formatCount(comments[post.id].length) : ''}</span>
+              </button>
+
+              {/* Repost / Share look */}
+              <button className="eng-item" onClick={() => {
+                if (navigator.share) navigator.share({ title: 'CareFind', text: post.content, url: window.location.href })
+              }}>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#536471" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                  <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                </svg>
+                <span style={{ color: '#536471' }}></span>
+              </button>
+
+              {/* Like */}
+              <button className="eng-item" onClick={() => toggleLike(post.id)}>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill={userHasLiked(post.id) ? '#f91880' : 'none'} stroke={userHasLiked(post.id) ? '#f91880' : '#536471'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                <span style={{ color: userHasLiked(post.id) ? '#f91880' : '#536471' }}>{likeCount(post.id) ? formatCount(likeCount(post.id)) : ''}</span>
+              </button>
+
+              {/* Views */}
+              <button className="eng-item" style={{ cursor: 'default' }}>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#536471" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="10"/>
+                </svg>
+                <span style={{ color: '#536471' }}>{formatCount(post.view_count)}</span>
               </button>
 
               {/* Save */}
-              <button className="eng-btn" onPointerDown={() => {
-                toggleSave(post.id)
-                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 460; g.gain.setValueAtTime(0.06, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.07); o.start(); o.stop(a.currentTime + 0.07); } catch(e){}
-              }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill={isSaved(post.id) ? theme.tealDeep : 'none'} stroke={isSaved(post.id) ? theme.tealDeep : '#666'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="eng-item" onClick={() => toggleSave(post.id)}>
+                <svg width="21" height="21" viewBox="0 0 24 24" fill={isSaved(post.id) ? theme.tealDeep : 'none'} stroke={isSaved(post.id) ? theme.tealDeep : '#536471'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
                 </svg>
-                <span style={{ fontSize: 11, color: isSaved(post.id) ? theme.tealDeep : '#666', fontWeight: 700 }}>Save</span>
+                <span style={{ color: '#536471' }}></span>
               </button>
 
               {/* Gift */}
-              <button className="eng-btn" onPointerDown={() => {
+              <button className="eng-item" onClick={() => {
                 user ? setGiftingPost({ postId: post.id, authorId: post.user_id }) : window.location.href = '/login'
-                try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g); g.connect(a.destination); o.type = 'sine'; o.frequency.value = 600; g.gain.setValueAtTime(0.07, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.1); o.start(); o.stop(a.currentTime + 0.1); } catch(e){}
               }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={theme.tealDeep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={theme.tealDeep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 12 20 22 4 22 4 12"/>
                   <rect x="2" y="7" width="20" height="5"/>
                   <line x1="12" y1="22" x2="12" y2="7"/>
                   <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
                   <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
                 </svg>
-                <span style={{ fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>Gift</span>
-              </button>
-
-              {/* Share */}
-              <button className="eng-btn" onPointerDown={() => {
-                if (navigator.share) navigator.share({ title: 'CareFind', text: post.content, url: window.location.href })
-              }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                </svg>
-                <span style={{ fontSize: 11, color: '#666', fontWeight: 700 }}>Share</span>
+                <span style={{ color: theme.tealDeep }}></span>
               </button>
             </div>
 
