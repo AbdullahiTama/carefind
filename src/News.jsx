@@ -23,6 +23,9 @@ function News() {
   const [submitting, setSubmitting] = useState(false)
   const [submitMsg, setSubmitMsg] = useState('')
   const [myPending, setMyPending] = useState([])
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [previewing, setPreviewing] = useState(false)
 
   useEffect(() => {
     loadNews()
@@ -72,6 +75,8 @@ function News() {
   async function submitNews() {
     if (!headline.trim()) { setSubmitMsg('Please add a headline.'); return }
     if (!body.trim()) { setSubmitMsg('Please write the article body.'); return }
+    if (!contactPhone.trim()) { setSubmitMsg('Please add a contact phone number.'); return }
+    if (!contactEmail.trim()) { setSubmitMsg('Please add a contact email.'); return }
     setSubmitting(true)
     setSubmitMsg('')
 
@@ -92,6 +97,8 @@ function News() {
       body: body.trim(),
       hero_image_url: heroUrl,
       author_id: user.id,
+      contact_phone: contactPhone.trim(),
+      contact_email: contactEmail.trim(),
       status: 'pending',
     })
 
@@ -100,6 +107,7 @@ function News() {
     } else {
       setSubmitMsg('✓ Submitted! Your news is under review and will publish once approved.')
       setHeadline(''); setSubtitle(''); setBody(''); setHeroFile(null); setHeroPreview(null)
+      setContactPhone(''); setContactEmail(''); setPreviewing(false)
       setTimeout(() => { setComposerOpen(false); setSubmitMsg(''); loadNews() }, 1800)
     }
     setSubmitting(false)
@@ -209,42 +217,91 @@ function News() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: '#fff', overflowY: 'auto', fontFamily: 'system-ui' }}>
           <div style={{ maxWidth: 480, margin: '0 auto', padding: 16, paddingBottom: 40 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: theme.navy }}>Submit News</h2>
-              <button onClick={() => setComposerOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, color: theme.textLight }}>✕</button>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: theme.navy }}>{previewing ? 'Preview' : 'Submit News'}</h2>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button onClick={() => setPreviewing(!previewing)} style={{ padding: '6px 12px', background: previewing ? theme.navy : '#ecfdf5', color: previewing ? '#fff' : theme.tealDeep, border: 'none', borderRadius: 16, fontWeight: 800, fontSize: 12 }}>
+                  {previewing ? '✏️ Back to editing' : '👁️ Preview'}
+                </button>
+                <button onClick={() => setComposerOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, color: theme.textLight }}>✕</button>
+              </div>
             </div>
 
             {submitMsg && (
               <p style={{ fontSize: 13, margin: '0 0 12px 0', padding: '10px 12px', borderRadius: 10, background: submitMsg.startsWith('✓') ? '#ecfdf5' : '#fef2f2', color: submitMsg.startsWith('✓') ? theme.success : theme.alert, fontWeight: 600 }}>{submitMsg}</p>
             )}
 
-            <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Headline</label>
-            <input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="A clear, strong headline" style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, border: `1px solid ${theme.border}`, borderRadius: 10, boxSizing: 'border-box', marginBottom: 12 }} />
-
-            <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Subtitle / summary</label>
-            <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="One line that summarizes the story" style={{ width: '100%', padding: 12, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10, boxSizing: 'border-box', marginBottom: 12 }} />
-
-            <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Hero image</label>
-            {heroPreview ? (
-              <div style={{ position: 'relative', marginBottom: 12 }}>
-                <img src={heroPreview} alt="hero" style={{ width: '100%', borderRadius: 10, maxHeight: 180, objectFit: 'cover' }} />
-                <button onClick={() => { setHeroFile(null); setHeroPreview(null) }} style={{ position: 'absolute', top: 8, right: 8, background: '#000', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 13 }}>✕</button>
+            {previewing ? (
+              /* ---------- PREVIEW (public article look) ---------- */
+              <div style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                <p style={{ margin: '0 0 10px 0', fontFamily: 'system-ui', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: theme.tealDeep, textTransform: 'uppercase' }}>Health</p>
+                <h1 style={{ margin: '0 0 12px 0', fontSize: 27, fontWeight: 900, color: theme.navy, lineHeight: 1.13 }}>{headline || 'Your headline appears here'}</h1>
+                {subtitle && <p style={{ margin: '0 0 16px 0', fontSize: 16, color: theme.textMid, lineHeight: 1.45, fontStyle: 'italic' }}>{subtitle}</p>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, marginBottom: 18, fontFamily: 'system-ui' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 14 }}>Y</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: theme.navy }}>By You</p>
+                    <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>Draft preview</p>
+                  </div>
+                </div>
+                {heroPreview && <img src={heroPreview} alt="hero" style={{ width: '100%', display: 'block', marginBottom: 18, borderRadius: 4 }} />}
+                <div style={{ fontSize: 17, lineHeight: 1.7, color: '#1f2937' }}>
+                  <ArticleEditor value={body} readOnly />
+                </div>
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <span style={{ fontSize: 18, color: theme.tealDeep, fontWeight: 900 }}>■</span>
+                </div>
+                <button onClick={submitNews} disabled={submitting} style={{ width: '100%', padding: 13, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, fontFamily: 'system-ui' }}>
+                  {submitting ? 'Submitting…' : 'Looks good — Submit for review'}
+                </button>
               </div>
             ) : (
-              <label style={{ display: 'block', padding: 14, border: `1.5px dashed ${theme.border}`, borderRadius: 10, textAlign: 'center', color: theme.tealDeep, fontWeight: 700, fontSize: 13, marginBottom: 12, cursor: 'pointer' }}>
-                📷 Add a hero image
-                <input type="file" accept="image/*" onChange={handleHeroSelect} style={{ display: 'none' }} />
-              </label>
+              /* ---------- EDIT FORM ---------- */
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Headline</label>
+                <input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="A clear, strong headline" style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, border: `1px solid ${theme.border}`, borderRadius: 10, boxSizing: 'border-box', marginBottom: 12 }} />
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Subtitle / summary</label>
+                <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="One line that summarizes the story" style={{ width: '100%', padding: 12, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10, boxSizing: 'border-box', marginBottom: 12 }} />
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Hero image</label>
+                {heroPreview ? (
+                  <div style={{ position: 'relative', marginBottom: 12 }}>
+                    <img src={heroPreview} alt="hero" style={{ width: '100%', borderRadius: 10, maxHeight: 180, objectFit: 'cover' }} />
+                    <button onClick={() => { setHeroFile(null); setHeroPreview(null) }} style={{ position: 'absolute', top: 8, right: 8, background: '#000', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 13 }}>✕</button>
+                  </div>
+                ) : (
+                  <label style={{ display: 'block', padding: 14, border: `1.5px dashed ${theme.border}`, borderRadius: 10, textAlign: 'center', color: theme.tealDeep, fontWeight: 700, fontSize: 13, marginBottom: 12, cursor: 'pointer' }}>
+                    📷 Add a hero image
+                    <input type="file" accept="image/*" onChange={handleHeroSelect} style={{ display: 'none' }} />
+                  </label>
+                )}
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Article body</label>
+                <div style={{ marginBottom: 16 }}>
+                  <ArticleEditor value={body} onChange={(val) => setBody(val)} />
+                </div>
+
+                {/* Contact details (required) */}
+                <div style={{ background: theme.bg, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy }}>📞 Your contact details</p>
+                  <p style={{ margin: '0 0 10px 0', fontSize: 11, color: theme.textLight }}>Required — our team may contact you to verify the story before publishing. Not shown publicly.</p>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Phone number *</label>
+                  <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} type="tel" placeholder="e.g. 08012345678" style={{ width: '100%', padding: 12, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10, boxSizing: 'border-box', marginBottom: 10 }} />
+                  <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Email address *</label>
+                  <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" placeholder="you@example.com" style={{ width: '100%', padding: 12, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10, boxSizing: 'border-box' }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setPreviewing(true)} style={{ flex: 1, padding: 13, background: '#ecfdf5', color: theme.tealDeep, border: `1px solid ${theme.tealBright}`, borderRadius: 12, fontWeight: 800, fontSize: 14 }}>
+                    👁️ Preview
+                  </button>
+                  <button onClick={submitNews} disabled={submitting} style={{ flex: 1, padding: 13, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14 }}>
+                    {submitting ? 'Submitting…' : 'Submit'}
+                  </button>
+                </div>
+                <p style={{ margin: '8px 0 0 0', fontSize: 11, color: theme.textLight, textAlign: 'center' }}>Your story will be reviewed by our team before publishing.</p>
+              </div>
             )}
-
-            <label style={{ fontSize: 12, fontWeight: 700, color: theme.navy, display: 'block', marginBottom: 5 }}>Article body</label>
-            <div style={{ marginBottom: 16 }}>
-              <ArticleEditor value={body} onChange={(val) => setBody(val)} />
-            </div>
-
-            <button onClick={submitNews} disabled={submitting} style={{ width: '100%', padding: 13, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14 }}>
-              {submitting ? 'Submitting…' : 'Submit for review'}
-            </button>
-            <p style={{ margin: '8px 0 0 0', fontSize: 11, color: theme.textLight, textAlign: 'center' }}>Your story will be reviewed by our team before publishing.</p>
           </div>
         </div>
       )}
