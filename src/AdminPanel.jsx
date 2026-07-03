@@ -91,6 +91,7 @@ export default function AdminPanel() {
   const [promoDays, setPromoDays] = useState('7')
   const [promoImage, setPromoImage] = useState(null)
   const [savingPromo, setSavingPromo] = useState(false)
+  const [searchLogs, setSearchLogs] = useState([])
   const [selectedPost, setSelectedPost] = useState(null)
   const [postAuthor, setPostAuthor] = useState(null)
   const [phoneMap, setPhoneMap] = useState({})
@@ -201,7 +202,12 @@ export default function AdminPanel() {
     setLoading(false)
   }
 
-  useEffect(() => { if (adminUser) { loadStories(); loadNews(); loadPromotions() } }, [adminUser])
+  useEffect(() => { if (adminUser) { loadStories(); loadNews(); loadPromotions(); loadSearchLogs() } }, [adminUser])
+
+  async function loadSearchLogs() {
+    const { data } = await supabase.from('search_logs').select('id, query, category, results_count, found, user_id, created_at, profiles(full_name, display_name)').order('created_at', { ascending: false }).limit(300)
+    setSearchLogs(data || [])
+  }
 
   async function loadPromotions() {
     const { data } = await supabase.from('promotions').select('*').order('created_at', { ascending: false })
@@ -476,6 +482,7 @@ export default function AdminPanel() {
     { key: 'stories', label: `📸 Stories (${stories.length})` },
     { key: 'news', label: `📰 News (${newsItems.filter(n => n.status === 'pending').length})` },
     { key: 'promotions', label: `🎯 Promos (${promotions.filter(p => !p.expires_at || new Date(p.expires_at) > new Date()).length})` },
+    { key: 'searches', label: `🔎 Searches (${searchLogs.filter(s => !s.found).length})` },
     { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
@@ -1428,6 +1435,76 @@ export default function AdminPanel() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {tab === 'searches' && (
+          <div>
+            {(() => {
+              const typed = searchLogs.filter(s => s.query)
+              const notFound = typed.filter(s => !s.found)
+              // Tally most-searched terms
+              const tally = {}
+              typed.forEach(s => { const k = s.query.toLowerCase().trim(); tally[k] = (tally[k] || 0) + 1 })
+              const topTerms = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 12)
+              // Tally unmet demand (not found terms)
+              const gapTally = {}
+              notFound.forEach(s => { const k = s.query.toLowerCase().trim(); gapTally[k] = (gapTally[k] || 0) + 1 })
+              const gaps = Object.entries(gapTally).sort((a, b) => b[1] - a[1]).slice(0, 15)
+              return (
+                <>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    <div style={{ ...card, flex: 1, margin: 0, textAlign: 'center' }}>
+                      <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: theme.navy }}>{typed.length}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Total searches</p>
+                    </div>
+                    <div style={{ ...card, flex: 1, margin: 0, textAlign: 'center' }}>
+                      <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: theme.alert }}>{notFound.length}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Found nothing</p>
+                    </div>
+                  </div>
+
+                  {/* Demand gaps — the gold */}
+                  <div style={card}>
+                    <p style={{ margin: '0 0 4px 0', fontWeight: 800, fontSize: 14, color: theme.alert }}>🎯 Demand gaps — searched but NOT found</p>
+                    <p style={{ margin: '0 0 12px 0', fontSize: 11.5, color: theme.textLight }}>These are products/services people want that you don't have yet. Consider stocking or adding them.</p>
+                    {gaps.length === 0 && <p style={{ fontSize: 13, color: theme.textLight }}>No unmet searches yet.</p>}
+                    {gaps.map(([term, count]) => (
+                      <div key={term} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#fef2f2', borderRadius: 10, marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: theme.navy, textTransform: 'capitalize' }}>{term}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: theme.alert, background: '#fff', padding: '3px 9px', borderRadius: 12 }}>{count}× wanted</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Most searched overall */}
+                  <div style={card}>
+                    <p style={{ margin: '0 0 12px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>🔥 Most searched terms</p>
+                    {topTerms.length === 0 && <p style={{ fontSize: 13, color: theme.textLight }}>No searches yet.</p>}
+                    {topTerms.map(([term, count]) => (
+                      <div key={term} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${theme.border}` }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: theme.navy, textTransform: 'capitalize' }}>{term}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: theme.tealDeep }}>{count}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent searches with user */}
+                  <div style={card}>
+                    <p style={{ margin: '0 0 12px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>🕐 Recent searches</p>
+                    {typed.slice(0, 40).map(s => (
+                      <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${theme.border}` }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.navy }}>{s.query}</span>
+                          <span style={{ fontSize: 10.5, color: theme.textLight, marginLeft: 8 }}>{s.category} · {s.profiles?.full_name || s.profiles?.display_name || 'Guest'}</span>
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: s.found ? '#ecfdf5' : '#fef2f2', color: s.found ? theme.success : theme.alert }}>{s.found ? `${s.results_count} found` : 'none'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            })()}
           </div>
         )}
 
