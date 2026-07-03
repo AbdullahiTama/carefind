@@ -4,293 +4,270 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
+import { getActiveBusiness, setActiveBusiness, clearActiveBusiness } from './lib/activeIdentity'
 
 function Profile() {
-  const { user, signOut, loading: authLoading } = useAuth()
+  const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
-  const [editing, setEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({ full_name: '', display_name: '', bio: '', location: '', website: '' })
+  const [ownedBusinesses, setOwnedBusinesses] = useState([])
   const [postCount, setPostCount] = useState(0)
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [isNewUser, setIsNewUser] = useState(false)
+  const [walletBalance, setWalletBalance] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [location, setLocation] = useState('')
+  const [website, setWebsite] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [activeBiz, setActiveBiz] = useState(getActiveBusiness())
 
   useEffect(() => {
-    async function load() {
-      if (!user) return
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    if (!user) { navigate('/login'); return }
+    loadProfile()
+  }, [user])
 
-      if (data) {
-        setProfile(data)
-        const emailBase = user.email?.split('@')[0] || ''
-        setForm({
-          full_name: data.full_name || '',
-          display_name: data.display_name || emailBase,
-          bio: data.bio || '',
-          location: data.location || '',
-          website: data.website || '',
-        })
-        // If no real name set yet, prompt to edit
-        if (!data.full_name && !data.display_name) setIsNewUser(true)
-      }
+  async function loadProfile() {
+    setLoading(true)
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url')
+      .eq('id', user.id)
+      .maybeSingle()
 
-      const [postsRes, followersRes, followingRes] = await Promise.all([
-        supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
-        supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
-      ])
-      setPostCount(postsRes.count || 0)
-      setFollowerCount(followersRes.count || 0)
-      setFollowingCount(followingRes.count || 0)
+    if (profileData) {
+      setProfile(profileData)
+      setFullName(profileData.full_name || '')
+      setDisplayName(profileData.display_name || '')
+      setLocation(profileData.location || '')
+      setWebsite(profileData.website || '')
     }
-    if (!authLoading) load()
-  }, [user, authLoading])
 
-  async function compressImage(file) {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const maxSize = 400
-          let { width, height } = img
-          if (width > height) { if (width > maxSize) { height *= maxSize / width; width = maxSize } }
-          else { if (height > maxSize) { width *= maxSize / height; height = maxSize } }
-          canvas.width = width
-          canvas.height = height
-          canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.75)
-        }
-        img.src = e.target.result
-      }
-      reader.readAsDataURL(file)
-    })
+    const [bizRes, postRes, followerRes, followingRes, walletRes] = await Promise.all([
+      supabase.from('businesses').select('id, name, business_type, cover_url, visible_on_carefind').eq('owner_id', user.id),
+      supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
+      supabase.from('wallets').select('balance').eq('user_id', user.id).maybeSingle(),
+    ])
+
+    setOwnedBusinesses(bizRes.data || [])
+    setPostCount(postRes.count || 0)
+    setFollowerCount(followerRes.count || 0)
+    setFollowingCount(followingRes.count || 0)
+    setWalletBalance(walletRes.data?.balance || 0)
+    setLoading(false)
   }
 
-  async function handleAvatarUpload(e) {
+  async function saveProfile() {
+    setSaving(true)
+    await supabase.from('profiles').update({
+      full_name: fullName.trim(),
+      display_name: displayName.trim(),
+      location: location.trim() || null,
+      website: website.trim() || null,
+    }).eq('id', user.id)
+    setEditing(false)
+    setSaving(false)
+    loadProfile()
+  }
+
+  async function handleCoverUpload(e) {
     const file = e.target.files[0]
     if (!file) return
-    setUploading(true)
-    setError('')
-
-    try {
-      const compressed = await compressImage(file)
-      const filePath = `${user.id}-${Date.now()}.jpg`
-
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressed, { upsert: true, contentType: 'image/jpeg' })
-      if (uploadError) throw uploadError
-
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath)
-      await supabase.from('profiles').update({ avatar_url: urlData.publicUrl }).eq('id', user.id)
-      setProfile((prev) => ({ ...prev, avatar_url: urlData.publicUrl }))
-    } catch (err) {
-      setError('Upload failed. Please try a smaller image.')
+    setUploadingCover(true)
+    const ext = file.name.split('.').pop()
+    const path = `cover-${user.id}-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('covers').upload(path, file)
+    if (!upErr) {
+      const { data: urlData } = supabase.storage.from('covers').getPublicUrl(path)
+      await supabase.from('profiles').update({ cover_url: urlData.publicUrl }).eq('id', user.id)
+      loadProfile()
     }
-    setUploading(false)
+    setUploadingCover(false)
   }
 
-  async function handleSave() {
-    if (!form.full_name.trim() && !form.display_name.trim()) {
-      setError('Please enter at least your name or username.')
-      return
-    }
-    setSaving(true)
-    setError('')
-
-    try {
-      const updates = {
-        full_name: form.full_name.trim() || null,
-        display_name: form.display_name.trim() || null,
-        bio: form.bio.trim() || null,
-        location: form.location.trim() || null,
-        website: form.website.trim() || null,
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
-
-      if (updateError) {
-        console.error('Profile update error:', updateError)
-        setError('Something went wrong saving your profile. Please try again.')
-      } else {
-        setProfile((prev) => ({ ...prev, ...updates }))
-        setForm((prev) => ({ ...prev, ...updates }))
-        setEditing(false)
-        setIsNewUser(false)
-      }
-    } catch (err) {
-      setError('Network error. Please check your connection.')
-    }
-    setSaving(false)
+  function switchToBusiness(biz) {
+    setActiveBusiness(biz)
+    setActiveBiz({ id: biz.id, name: biz.name })
   }
 
-  async function handleLogout() {
+  function switchToPersonal() {
+    clearActiveBusiness()
+    setActiveBiz(null)
+  }
+
+  async function handleSignOut() {
+    clearActiveBusiness()
     await signOut()
-    navigate('/')
+    navigate('/login')
   }
 
-  if (authLoading) return <div style={{ padding: 20, fontFamily: 'system-ui' }}>Loading...</div>
+  if (loading) return <div style={{ padding: 20, fontFamily: 'system-ui' }}>Loading...</div>
 
-  if (!user) {
-    return (
-      <div style={{ padding: 20, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto', textAlign: 'center' }}>
-        <p style={{ color: theme.textMid }}>Log in to view your profile.</p>
-        <Link to="/login" style={{ color: theme.tealDeep, fontWeight: 700 }}>Log In</Link>
-        <BottomNav />
-      </div>
-    )
-  }
-
-  const emailPrefix = user.email?.split('@')[0] || ''
-  const displayName = profile?.full_name || profile?.display_name || emailPrefix
-  const username = profile?.display_name
+  const displayLabel = profile?.full_name || profile?.display_name || 'CareFind User'
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
-
-      {/* New user prompt */}
-      {isNewUser && !editing && (
-        <div style={{ background: '#fef3c7', padding: '12px 16px', borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <p style={{ margin: 0, fontSize: 13, color: '#92400e', fontWeight: 600 }}>👋 Complete your profile to get started</p>
-          <button onClick={() => setEditing(true)} style={{ background: theme.tealDeep, color: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700 }}>Set up</button>
+      {/* Posting-as banner */}
+      {activeBiz && (
+        <div style={{ background: theme.navy, color: '#fff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🏢</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800 }}>Posting as {activeBiz.name}</p>
+            <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.6)' }}>Your posts, comments & news use this business</p>
+          </div>
+          <button onClick={switchToPersonal} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 16, padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
+            Switch back
+          </button>
         </div>
       )}
 
-      {/* Cover + Avatar */}
-      <div style={{ position: 'relative', marginBottom: 60 }}>
-        <div style={{ height: 120, background: theme.heroGradient }} />
-        <div style={{ position: 'absolute', bottom: -50, left: 16, display: 'flex', alignItems: 'flex-end', gap: 12 }}>
-          <div style={{ position: 'relative' }}>
-            <div style={{
-              width: 90, height: 90, borderRadius: '50%',
-              background: profile?.avatar_url ? `url(${profile.avatar_url})` : theme.tealGradient,
-              backgroundSize: 'cover', backgroundPosition: 'center',
-              border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 30, fontWeight: 800,
-            }}>
-              {!profile?.avatar_url && (displayName?.[0]?.toUpperCase() || '?')}
-            </div>
-            <label style={{
-              position: 'absolute', bottom: 2, right: 2, background: theme.tealDeep, color: '#fff',
-              borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 13, cursor: 'pointer', border: '2px solid #fff',
-            }}>
-              {uploading ? '...' : '✎'}
-              <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
-            </label>
-          </div>
+      {/* Cover */}
+      <div style={{ position: 'relative', marginBottom: 55 }}>
+        <div style={{ height: 120, background: profile?.cover_url ? `url(${profile.cover_url})` : theme.heroGradient, backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative' }}>
+          <label style={{ position: 'absolute', top: 14, right: 14, background: 'rgba(0,0,0,0.4)', color: '#fff', borderRadius: 16, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            {uploadingCover ? 'Uploading…' : '📷 Cover'}
+            <input type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: 'none' }} />
+          </label>
         </div>
-        <div style={{ position: 'absolute', bottom: -46, right: 16 }}>
-          {!editing ? (
-            <button onClick={() => setEditing(true)} style={{
-              border: `1px solid ${theme.border}`, background: '#fff', color: theme.navy,
-              borderRadius: 20, padding: '6px 16px', fontSize: 13, fontWeight: 700,
-            }}>
-              Edit Profile
-            </button>
-          ) : (
-            <button onClick={handleSave} disabled={saving} style={{
-              background: theme.tealGradient, color: '#fff', border: 'none',
-              borderRadius: 20, padding: '6px 16px', fontSize: 13, fontWeight: 700,
-            }}>
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-          )}
+        <div style={{ position: 'absolute', bottom: -46, left: 16 }}>
+          <div style={{ width: 88, height: 88, borderRadius: '50%', background: theme.tealGradient, border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 30, fontWeight: 800 }}>
+            {displayLabel[0]?.toUpperCase() || '?'}
+          </div>
         </div>
       </div>
 
-      <div style={{ padding: '0 16px 16px 16px' }}>
-        {!editing ? (
-          <>
-            <h1 style={{ fontSize: 20, fontWeight: 900, color: theme.navy, margin: '0 0 2px 0' }}>{displayName}</h1>
-            {username && <p style={{ margin: '0 0 6px 0', fontSize: 13, color: theme.textLight }}>@{username}</p>}
-            {profile?.is_verified && (
-              <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 10px', borderRadius: 20, border: `1px solid ${theme.tealBright}` }}>
-                ✓ Verified {profile.verification_label}
-              </span>
-            )}
-            {profile?.bio && <p style={{ margin: '10px 0 6px 0', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{profile.bio}</p>}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+      <div style={{ padding: '0 16px' }}>
+        {/* Name + edit */}
+        {editing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Username" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+            <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveProfile} disabled={saving} style={{ flex: 1, padding: 11, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}>{saving ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => setEditing(false)} style={{ flex: 1, padding: 11, background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 13 }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h1 style={{ fontSize: 20, fontWeight: 900, color: theme.navy, margin: '0 0 2px 0' }}>{displayLabel}</h1>
+                {profile?.display_name && <p style={{ margin: '0 0 4px 0', fontSize: 13, color: theme.textLight }}>@{profile.display_name}</p>}
+                {profile?.is_verified && (
+                  <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 10px', borderRadius: 20, border: `1px solid ${theme.tealBright}` }}>
+                    ✓ Verified {profile.verification_label}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setEditing(true)} style={{ border: `1px solid ${theme.border}`, background: '#fff', color: theme.navy, borderRadius: 20, padding: '6px 16px', fontSize: 13, fontWeight: 700 }}>Edit</button>
+            </div>
+            <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
               {profile?.location && <span style={{ fontSize: 12.5, color: theme.textLight }}>📍 {profile.location}</span>}
               {profile?.website && <a href={profile.website} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: theme.tealDeep, textDecoration: 'none' }}>🔗 {profile.website}</a>}
             </div>
-
-            {/* Stats */}
-            <div style={{ display: 'flex', gap: 20, margin: '14px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, padding: '12px 0' }}>
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{postCount}</p>
-                <p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Posts</p>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followerCount}</p>
-                <p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Followers</p>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followingCount}</p>
-                <p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Following</p>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-            {[
-              { label: 'Full Name', key: 'full_name', placeholder: 'Your real name' },
-              { label: 'Username', key: 'display_name', placeholder: '@username' },
-              { label: 'Bio', key: 'bio', placeholder: 'A short bio about you...' },
-              { label: 'Location', key: 'location', placeholder: 'Lagos, Nigeria' },
-              { label: 'Website', key: 'website', placeholder: 'https://yourwebsite.com' },
-            ].map((field) => (
-              <div key={field.key}>
-                <label style={{ fontSize: 11, color: theme.textLight, fontWeight: 700 }}>{field.label}</label>
-                <input
-                  type="text"
-                  value={form[field.key]}
-                  onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
-                  placeholder={field.placeholder}
-                  style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, marginTop: 3 }}
-                />
-              </div>
-            ))}
-            {error && <p style={{ color: theme.alert, fontSize: 13 }}>{error}</p>}
-            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: theme.textLight, fontSize: 13 }}>Cancel</button>
           </div>
         )}
 
-        {/* Profile links */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[
-            { icon: '🪙', label: 'My Wallet & CareCoins', to: '/wallet' },
-            { icon: '🔖', label: 'Saved Posts', to: '/saved' },
-            { icon: '📊', label: 'My Activity (Posts & Reviews)', to: '/dashboard' },
-            { icon: '🩺', label: 'Become a Verified Professional', to: '/verify' },
-            { icon: '🏥', label: 'Register or Claim a Business', to: '/claim-business' },
-            { icon: '🏪', label: 'Business Dashboard', to: '/business-dashboard' },
-            { icon: '🩺', label: 'Professional Dashboard', to: '/professional-dashboard' },
-          ].map((item) => (
-            <Link key={item.to} to={item.to} style={{ textDecoration: 'none' }}>
-              <div style={{
-                border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 14px', display: 'flex',
-                alignItems: 'center', gap: 10, background: theme.cardBg, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              }}>
-                <span style={{ width: 32, height: 32, borderRadius: 9, background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{item.icon}</span>
-                <span style={{ fontSize: 13.5, color: theme.textMid, fontWeight: 600, flex: 1 }}>{item.label}</span>
-                <span style={{ color: theme.textLight, fontSize: 14 }}>›</span>
-              </div>
-            </Link>
-          ))}
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: 20, borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, padding: '12px 0', marginBottom: 16 }}>
+          <div><p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{postCount}</p><p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Posts</p></div>
+          <div><p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followerCount}</p><p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Followers</p></div>
+          <div><p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followingCount}</p><p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Following</p></div>
         </div>
 
-        <p style={{ margin: '6px 0 0 0', fontSize: 11.5, color: theme.textLight, textAlign: 'center' }}>{user.email}</p>
-        <button onClick={handleLogout} style={{ marginTop: 10, padding: '12px', width: '100%', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 14, fontWeight: 700, fontSize: 14 }}>
-          Log Out
+        {/* Wallet */}
+        <Link to="/wallet" style={{ textDecoration: 'none' }}>
+          <div style={{ background: theme.heroGradient, borderRadius: 16, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ margin: '0 0 2px 0', fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>CareCoins Balance</p>
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: '#fff' }}>{walletBalance} 🪙</p>
+            </div>
+            <span style={{ color: '#fff', fontSize: 20 }}>›</span>
+          </div>
+        </Link>
+
+        {/* My Businesses + Post-as switcher */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <p style={{ fontSize: 12, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>My Businesses</p>
+            <Link to="/business-dashboard" style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none' }}>Manage →</Link>
+          </div>
+
+          {ownedBusinesses.length === 0 && (
+            <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 14, padding: 16, textAlign: 'center' }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textLight }}>You don't manage any businesses yet.</p>
+              <Link to="/claim-business" style={{ fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none' }}>Claim a business →</Link>
+            </div>
+          )}
+
+          {/* Personal identity option */}
+          {ownedBusinesses.length > 0 && (
+            <div
+              onClick={switchToPersonal}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${!activeBiz ? theme.tealDeep : theme.border}`, background: !activeBiz ? '#ecfdf5' : theme.cardBg, marginBottom: 8, cursor: 'pointer' }}
+            >
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15 }}>
+                {displayLabel[0]?.toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: theme.navy }}>{displayLabel} <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600 }}>(you)</span></p>
+                <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Personal account</p>
+              </div>
+              {!activeBiz && <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>}
+            </div>
+          )}
+
+          {/* Business identity options */}
+          {ownedBusinesses.map((b) => {
+            const isActive = activeBiz?.id === b.id
+            return (
+              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${isActive ? theme.tealDeep : theme.border}`, background: isActive ? '#ecfdf5' : theme.cardBg, marginBottom: 8 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: b.cover_url ? `url(${b.cover_url})` : theme.navy, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
+                  {!b.cover_url && (b.name?.[0]?.toUpperCase() || '🏢')}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight, textTransform: 'capitalize' }}>{b.business_type}</p>
+                </div>
+                {isActive ? (
+                  <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>
+                ) : (
+                  <button onClick={() => switchToBusiness(b)} style={{ background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 16, padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
+                    Post as
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Links */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
+          <Link to="/saved" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 4px', textDecoration: 'none', color: theme.navy, borderBottom: `1px solid ${theme.border}` }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>🔖 Saved posts</span>
+            <span style={{ color: theme.textLight }}>›</span>
+          </Link>
+          {!profile?.is_verified && (
+            <Link to="/verify" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 4px', textDecoration: 'none', color: theme.navy, borderBottom: `1px solid ${theme.border}` }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>🩺 Get verified</span>
+              <span style={{ color: theme.textLight }}>›</span>
+            </Link>
+          )}
+          <Link to="/earn" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 4px', textDecoration: 'none', color: theme.navy, borderBottom: `1px solid ${theme.border}` }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>💰 Earn on CareFind</span>
+            <span style={{ color: theme.textLight }}>›</span>
+          </Link>
+        </div>
+
+        <button onClick={handleSignOut} style={{ width: '100%', padding: 13, background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, marginBottom: 8 }}>
+          Sign Out
         </button>
       </div>
 
