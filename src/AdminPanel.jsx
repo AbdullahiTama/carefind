@@ -85,6 +85,12 @@ export default function AdminPanel() {
   const [editingNews, setEditingNews] = useState(null)
   const [newsPhones, setNewsPhones] = useState({})
   const [savingNews, setSavingNews] = useState(false)
+  const [promotions, setPromotions] = useState([])
+  const [promoTitle, setPromoTitle] = useState('')
+  const [promoLink, setPromoLink] = useState('')
+  const [promoDays, setPromoDays] = useState('7')
+  const [promoImage, setPromoImage] = useState(null)
+  const [savingPromo, setSavingPromo] = useState(false)
   const [selectedPost, setSelectedPost] = useState(null)
   const [postAuthor, setPostAuthor] = useState(null)
   const [phoneMap, setPhoneMap] = useState({})
@@ -195,7 +201,47 @@ export default function AdminPanel() {
     setLoading(false)
   }
 
-  useEffect(() => { if (adminUser) { loadStories(); loadNews() } }, [adminUser])
+  useEffect(() => { if (adminUser) { loadStories(); loadNews(); loadPromotions() } }, [adminUser])
+
+  async function loadPromotions() {
+    const { data } = await supabase.from('promotions').select('*').order('created_at', { ascending: false })
+    setPromotions(data || [])
+  }
+
+  async function createPromotion() {
+    if (!promoTitle.trim()) { alert('Add a title'); return }
+    setSavingPromo(true)
+    let imageUrl = null
+    if (promoImage) {
+      const ext = promoImage.name.split('.').pop()
+      const path = `promo-${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('promo-images').upload(path, promoImage)
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('promo-images').getPublicUrl(path)
+        imageUrl = urlData.publicUrl
+      }
+    }
+    const expiresAt = new Date(Date.now() + parseInt(promoDays) * 86400000).toISOString()
+    const { error } = await supabase.from('promotions').insert({
+      title: promoTitle.trim(),
+      link_url: promoLink.trim() || null,
+      image_url: imageUrl,
+      expires_at: expiresAt,
+    })
+    if (!error) {
+      setPromoTitle(''); setPromoLink(''); setPromoDays('7'); setPromoImage(null)
+      loadPromotions()
+    } else {
+      alert('Error: ' + error.message)
+    }
+    setSavingPromo(false)
+  }
+
+  async function deletePromotion(id) {
+    if (!window.confirm('Delete this promotion?')) return
+    await supabase.from('promotions').delete().eq('id', id)
+    loadPromotions()
+  }
 
   async function viewUserDetails(u) {
     setSelectedUser(u)
@@ -429,6 +475,7 @@ export default function AdminPanel() {
     { key: 'businesses', label: `🏢 Companies (${businesses.length})` },
     { key: 'stories', label: `📸 Stories (${stories.length})` },
     { key: 'news', label: `📰 News (${newsItems.filter(n => n.status === 'pending').length})` },
+    { key: 'promotions', label: `🎯 Promos (${promotions.filter(p => !p.expires_at || new Date(p.expires_at) > new Date()).length})` },
     { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
@@ -1325,6 +1372,58 @@ export default function AdminPanel() {
                       <button onClick={() => rejectNews(n.id)} style={{ flex: 1, padding: 9, background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✕ Reject</button>
                     )}
                     <button onClick={() => deleteNews(n.id)} style={{ padding: '9px 12px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>🗑️</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {tab === 'promotions' && (
+          <div>
+            <div style={card}>
+              <p style={{ margin: '0 0 6px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>🎯 Add a Promotion</p>
+              <p style={{ margin: '0 0 12px 0', fontSize: 11.5, color: theme.textLight }}>Promotions appear in the moving featured strip on MedMarket. They auto-expire on the date you set.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input value={promoTitle} onChange={(e) => setPromoTitle(e.target.value)} placeholder="Promotion title (e.g. 50% off Vitamin C)" style={input} />
+                <input value={promoLink} onChange={(e) => setPromoLink(e.target.value)} placeholder="Link (e.g. /business/xyz or product page)" style={input} />
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: theme.textMid, display: 'block', marginBottom: 4 }}>Runs for</label>
+                  <select value={promoDays} onChange={(e) => setPromoDays(e.target.value)} style={{ ...input, background: '#fff' }}>
+                    <option value="3">3 days</option>
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                  </select>
+                </div>
+                <label style={{ fontSize: 13, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer' }}>
+                  📷 {promoImage ? promoImage.name : 'Upload promotion image'}
+                  <input type="file" accept="image/*" onChange={(e) => setPromoImage(e.target.files[0] || null)} style={{ display: 'none' }} />
+                </label>
+                <button onClick={createPromotion} disabled={savingPromo} style={{ padding: 11, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
+                  {savingPromo ? 'Posting...' : 'Add Promotion'}
+                </button>
+              </div>
+            </div>
+
+            {promotions.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No promotions yet.</p>}
+            {promotions.map(p => {
+              const expired = p.expires_at && new Date(p.expires_at) < new Date()
+              return (
+                <div key={p.id} style={{ ...card, opacity: expired ? 0.5 : 1 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{ width: 60, height: 60, borderRadius: 10, flexShrink: 0, background: p.image_url ? `url(${p.image_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800 }}>
+                      {!p.image_url && '🎯'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 13, color: theme.navy }}>{p.title}</p>
+                      {p.link_url && <p style={{ margin: '0 0 2px 0', fontSize: 11, color: theme.tealDeep }}>{p.link_url}</p>}
+                      <p style={{ margin: 0, fontSize: 11, color: expired ? theme.alert : theme.textLight }}>
+                        {expired ? '⏰ Expired' : p.expires_at ? `Expires ${new Date(p.expires_at).toLocaleDateString()}` : 'No expiry'}
+                      </p>
+                    </div>
+                    <button onClick={() => deletePromotion(p.id)} style={{ padding: '6px 10px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️</button>
                   </div>
                 </div>
               )
