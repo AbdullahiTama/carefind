@@ -48,6 +48,7 @@ function Feed() {
   const [profileComplete, setProfileComplete] = useState(true)
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [commentCounts, setCommentCounts] = useState({})
+  const [latestNews, setLatestNews] = useState([])
 
   const themeLabels = {
     'teal-depth': '🌊 Ocean',
@@ -206,7 +207,19 @@ function Feed() {
   useEffect(() => {
     loadFeed()
     checkProfileComplete()
+    loadLatestNews()
   }, [user])
+
+  async function loadLatestNews() {
+    const { data } = await supabase
+      .from('news')
+      .select('id, headline, hero_image_url, published_at')
+      .eq('status', 'approved')
+      .order('published_at', { ascending: false })
+      .limit(6)
+    setLatestNews(data || [])
+  }
+
 
   function handleImageSelect(e) {
     const file = e.target.files[0]
@@ -502,6 +515,36 @@ function Feed() {
 
       {/* Stories row */}
       <Stories />
+
+      {/* News highlight strip */}
+      {latestNews.length > 0 && (
+        <div style={{ marginTop: 14, marginBottom: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '0 2px' }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: theme.navy, letterSpacing: '0.02em' }}>📰 Latest News</span>
+            <Link to="/news" style={{ fontSize: 11.5, fontWeight: 700, color: theme.tealDeep, textDecoration: 'none' }}>See all →</Link>
+          </div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch' }}>
+            {latestNews.map((n) => (
+              <Link key={n.id} to="/news" style={{ flexShrink: 0, width: 190, textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', background: theme.cardBg }}>
+                  <div style={{
+                    height: 100, background: n.hero_image_url ? `url(${n.hero_image_url})` : theme.heroGradient,
+                    backgroundSize: 'cover', backgroundPosition: 'center',
+                    display: 'flex', alignItems: 'flex-start', padding: 8,
+                  }}>
+                    <span style={{ fontSize: 8.5, fontWeight: 900, letterSpacing: '0.08em', color: '#fff', background: theme.tealDeep, padding: '2px 7px', borderRadius: 20, textTransform: 'uppercase' }}>News</span>
+                  </div>
+                  <div style={{ padding: '9px 10px 11px' }}>
+                    <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: theme.navy, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {n.headline}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Complete-your-profile banner */}
       {user && !profileComplete && !bannerDismissed && (
