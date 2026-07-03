@@ -81,6 +81,10 @@ export default function AdminPanel() {
   const [storyBg, setStoryBg] = useState('#0f766e')
   const [storyImageFile, setStoryImageFile] = useState(null)
   const [savingStory, setSavingStory] = useState(false)
+  const [newsItems, setNewsItems] = useState([])
+  const [editingNews, setEditingNews] = useState(null)
+  const [newsPhones, setNewsPhones] = useState({})
+  const [savingNews, setSavingNews] = useState(false)
   const [selectedPost, setSelectedPost] = useState(null)
   const [postAuthor, setPostAuthor] = useState(null)
   const [phoneMap, setPhoneMap] = useState({})
@@ -191,7 +195,7 @@ export default function AdminPanel() {
     setLoading(false)
   }
 
-  useEffect(() => { if (adminUser) loadStories() }, [adminUser])
+  useEffect(() => { if (adminUser) { loadStories(); loadNews() } }, [adminUser])
 
   async function viewUserDetails(u) {
     setSelectedUser(u)
@@ -202,6 +206,50 @@ export default function AdminPanel() {
   async function loadStories() {
     const { data } = await supabase.from('stories').select('*').order('created_at', { ascending: false })
     setStories(data || [])
+  }
+
+  async function loadNews() {
+    const { data } = await supabase
+      .from('news')
+      .select('*, profiles(full_name, display_name)')
+      .order('created_at', { ascending: false })
+      .limit(60)
+    setNewsItems(data || [])
+    // Build phone lookup for submitters from verification_requests
+    const authorIds = [...new Set((data || []).map(n => n.author_id).filter(Boolean))]
+    if (authorIds.length) {
+      const { data: verifs } = await supabase.from('verification_requests').select('user_id, phone').in('user_id', authorIds)
+      const pm = {}
+      ;(verifs || []).forEach(v => { if (v.user_id && v.phone) pm[v.user_id] = v.phone })
+      setNewsPhones(pm)
+    }
+  }
+
+  async function approveNews(item) {
+    setSavingNews(true)
+    const payload = editingNews && editingNews.id === item.id
+      ? { headline: editingNews.headline, subtitle: editingNews.subtitle, body: editingNews.body }
+      : {}
+    await supabase.from('news').update({
+      ...payload,
+      status: 'approved',
+      published_at: new Date().toISOString(),
+    }).eq('id', item.id)
+    setEditingNews(null)
+    setSavingNews(false)
+    loadNews()
+  }
+
+  async function rejectNews(id) {
+    await supabase.from('news').update({ status: 'rejected' }).eq('id', id)
+    setEditingNews(null)
+    loadNews()
+  }
+
+  async function deleteNews(id) {
+    if (!window.confirm('Permanently delete this news item?')) return
+    await supabase.from('news').delete().eq('id', id)
+    loadNews()
   }
 
   async function createStory() {
@@ -380,6 +428,7 @@ export default function AdminPanel() {
     { key: 'withdrawals', label: `💰 Withdrawals (${withdrawals.filter(w => w.status === 'pending').length})` },
     { key: 'businesses', label: `🏢 Companies (${businesses.length})` },
     { key: 'stories', label: `📸 Stories (${stories.length})` },
+    { key: 'news', label: `📰 News (${newsItems.filter(n => n.status === 'pending').length})` },
     { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
@@ -1198,6 +1247,84 @@ export default function AdminPanel() {
                       </p>
                     </div>
                     <button onClick={() => deleteStory(s.id)} style={{ padding: '6px 10px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {tab === 'news' && (
+          <div>
+            {newsItems.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No news submissions yet.</p>}
+            {newsItems.map(n => {
+              const isEditing = editingNews && editingNews.id === n.id
+              const phone = newsPhones[n.author_id]
+              return (
+                <div key={n.id} style={{ ...card, border: `1px solid ${n.status === 'pending' ? '#fca5a5' : theme.border}` }}>
+                  {/* Status + submitter */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, background: n.status === 'approved' ? '#ecfdf5' : n.status === 'rejected' ? '#fef2f2' : '#fef3c7', color: n.status === 'approved' ? theme.success : n.status === 'rejected' ? theme.alert : '#92400e' }}>{n.status}</span>
+                      <p style={{ margin: '6px 0 0 0', fontSize: 11.5, color: theme.textLight }}>
+                        Submitted by <strong style={{ color: theme.navy }}>{n.profiles?.full_name || n.profiles?.display_name || 'User'}</strong> · {timeAgo(n.created_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Contact submitter */}
+                  {(n.contact_phone || n.contact_email || phone) && (
+                    <div style={{ background: '#ecfdf5', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                      <p style={{ margin: '0 0 6px 0', fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>Contact submitter</p>
+                      {(n.contact_phone || phone) && (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 12.5, color: theme.textMid, fontWeight: 600, flex: 1 }}>📱 {n.contact_phone || phone}</span>
+                          <a href={`tel:${n.contact_phone || phone}`} style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: theme.tealDeep, padding: '5px 12px', borderRadius: 16, textDecoration: 'none' }}>📞 Call</a>
+                        </div>
+                      )}
+                      {n.contact_email && (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <span style={{ fontSize: 12.5, color: theme.textMid, fontWeight: 600, flex: 1 }}>✉️ {n.contact_email}</span>
+                          <a href={`mailto:${n.contact_email}`} style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: theme.tealDeep, padding: '5px 12px', borderRadius: 16, textDecoration: 'none' }}>Email</a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hero */}
+                  {n.hero_image_url && <div style={{ width: '100%', height: 120, borderRadius: 10, background: `url(${n.hero_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center', marginBottom: 10 }} />}
+
+                  {/* Editable fields */}
+                  {isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                      <input value={editingNews.headline} onChange={(e) => setEditingNews({ ...editingNews, headline: e.target.value })} placeholder="Headline" style={{ ...input, fontWeight: 700 }} />
+                      <input value={editingNews.subtitle || ''} onChange={(e) => setEditingNews({ ...editingNews, subtitle: e.target.value })} placeholder="Subtitle" style={input} />
+                      <textarea value={editingNews.body || ''} onChange={(e) => setEditingNews({ ...editingNews, body: e.target.value })} rows={6} placeholder="Body" style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }} />
+                      <p style={{ margin: 0, fontSize: 10.5, color: theme.textLight }}>Note: body is stored as rich blocks; heavy formatting is best done in-app. Light text edits here are fine.</p>
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: 10 }}>
+                      <p style={{ margin: '0 0 4px 0', fontWeight: 800, fontSize: 15, color: theme.navy }}>{n.headline}</p>
+                      {n.subtitle && <p style={{ margin: '0 0 6px 0', fontSize: 13, color: theme.textMid, fontStyle: 'italic' }}>{n.subtitle}</p>}
+                      <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{(n.body || '').replace(/[{}\[\]"]/g, ' ').slice(0, 180)}…</p>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {!isEditing && n.status === 'pending' && (
+                      <button onClick={() => setEditingNews({ id: n.id, headline: n.headline, subtitle: n.subtitle, body: n.body })} style={{ flex: 1, padding: 9, background: theme.bg, color: theme.navy, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✏️ Edit</button>
+                    )}
+                    {isEditing && (
+                      <button onClick={() => setEditingNews(null)} style={{ padding: '9px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 13 }}>Cancel edit</button>
+                    )}
+                    {n.status !== 'approved' && (
+                      <button onClick={() => approveNews(n)} disabled={savingNews} style={{ flex: 1, padding: 9, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✓ {isEditing ? 'Save & Publish' : 'Approve & Publish'}</button>
+                    )}
+                    {n.status === 'pending' && (
+                      <button onClick={() => rejectNews(n.id)} style={{ flex: 1, padding: 9, background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✕ Reject</button>
+                    )}
+                    <button onClick={() => deleteNews(n.id)} style={{ padding: '9px 12px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>🗑️</button>
                   </div>
                 </div>
               )
