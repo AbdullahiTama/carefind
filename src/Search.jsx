@@ -111,13 +111,14 @@ function Search() {
 
     // Log the search (query + category + user + whether anything was found)
     if (q || stateFilter || specialtyFilter) {
-      supabase.from('search_logs').insert({
+      const { error: logErr } = await supabase.from('search_logs').insert({
         query: q || null,
         category: tab,
         user_id: user?.id || null,
         results_count: resultCount,
         found: resultCount > 0,
       })
+      if (logErr) alert('Search log failed: ' + logErr.message)
     }
   }
 
