@@ -48,11 +48,12 @@ function Search() {
 
   async function loadFeatured() {
     const { data } = await supabase
-      .from('products')
-      .select('id, name, emoji, price, business_id, list_on_carefind, businesses(name)')
+      .from('promotions')
+      .select('id, title, image_url, link_url, expires_at')
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order('created_at', { ascending: false })
-      .limit(14)
-    setFeatured((data || []).filter(p => p.list_on_carefind !== false))
+      .limit(20)
+    setFeatured(data || [])
   }
 
   async function runSearch(e) {
@@ -151,16 +152,18 @@ function Search() {
 
       {showingFeatured && featured.length > 0 && (
         <div style={{ padding: '14px 0 4px' }}>
-          <p style={{ margin: '0 0 10px 16px', fontSize: 12, fontWeight: 900, color: theme.navy }}>✨ Featured on MedMarket</p>
+          <p style={{ margin: '0 0 10px 16px', fontSize: 12, fontWeight: 900, color: theme.navy }}>✨ Featured Promotions</p>
           <div style={{ overflow: 'hidden', width: '100%' }}>
             <div className="mm-track" ref={trackRef}>
               {[...featured, ...featured].map((p, i) => (
-                <Link key={i} className="mm-card" to={`/business/${p.business_id}`} style={{ animationDelay: '0s', textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
-                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
-                    <div style={{ fontSize: 30, marginBottom: 6 }}>{p.emoji || '💊'}</div>
-                    <p style={{ margin: '0 0 3px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                    {p.price != null && <p style={{ margin: '0 0 2px 0', fontSize: 12, fontWeight: 700, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
-                    <p style={{ margin: 0, fontSize: 10, color: theme.textLight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businesses?.name || ''}</p>
+                <Link key={i} className="mm-card" to={p.link_url || '/search'} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 200 }}>
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden', background: theme.cardBg }}>
+                    <div style={{ height: 110, background: p.image_url ? `url(${p.image_url})` : theme.heroGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'flex-start', padding: 8 }}>
+                      <span style={{ fontSize: 8.5, fontWeight: 900, letterSpacing: '0.06em', color: '#fff', background: theme.tealDeep, padding: '2px 8px', borderRadius: 20, textTransform: 'uppercase' }}>Promo</span>
+                    </div>
+                    <div style={{ padding: '9px 11px 12px' }}>
+                      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: theme.navy, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.title}</p>
+                    </div>
                   </div>
                 </Link>
               ))}
