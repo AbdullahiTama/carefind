@@ -75,6 +75,15 @@ export default function AdminPanel() {
   const [roleNotifCount, setRoleNotifCount] = useState(0)
   const [withdrawals, setWithdrawals] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [stories, setStories] = useState([])
+  const [storyTitle, setStoryTitle] = useState('')
+  const [storyBody, setStoryBody] = useState('')
+  const [storyBg, setStoryBg] = useState('#0f766e')
+  const [storyImageFile, setStoryImageFile] = useState(null)
+  const [savingStory, setSavingStory] = useState(false)
+  const [selectedPost, setSelectedPost] = useState(null)
+  const [postAuthor, setPostAuthor] = useState(null)
+  const [phoneMap, setPhoneMap] = useState({})
 
   useEffect(() => {
     try {
@@ -104,7 +113,7 @@ export default function AdminPanel() {
   async function loadAll() {
     // Load posts and profiles separately to isolate any failures
     const postsRes = await supabase.from('posts').select('id, content, post_type, created_at, user_id').order('created_at', { ascending: false }).limit(50)
-    const usersRes2 = await supabase.from('profiles').select('id, full_name, display_name, is_verified, specialty, created_at, location, bio, avatar_url').order('created_at', { ascending: false }).limit(100)
+    const usersRes2 = await supabase.from('profiles').select('id, full_name, display_name, is_verified, verification_label, specialty, location, website, created_at, cover_url').order('created_at', { ascending: false }).limit(100)
     if (usersRes2.data) setUsers(usersRes2.data)
 
     const [usersRes, verifRes, claimsRes, reportsRes, txRes, tasksRes, teamsRes, staffRes, withdrawRes, taskSubRes, consultRes, bizRes] = await Promise.all([
@@ -122,6 +131,10 @@ export default function AdminPanel() {
       supabase.from('consultations').select('*, profiles!consultations_patient_id_fkey(full_name, display_name)').eq('status', 'paid').order('created_at', { ascending: false }).limit(20),
     ])
     setVerifications(verifRes.data || [])
+    // Build phone lookup: user_id -> phone (from verification requests)
+    const pm = {}
+    ;(verifRes.data || []).forEach(v => { if (v.user_id && v.phone) pm[v.user_id] = v.phone })
+    setPhoneMap(pm)
     setClaims(claimsRes.data || [])
     setReports(reportsRes.data || [])
     setPosts(postsRes.data || [])
@@ -178,10 +191,63 @@ export default function AdminPanel() {
     setLoading(false)
   }
 
+  useEffect(() => { if (adminUser) loadStories() }, [adminUser])
+
   async function viewUserDetails(u) {
     setSelectedUser(u)
     const { data } = await supabase.from('posts').select('id, content, post_type, created_at').eq('user_id', u.id).order('created_at', { ascending: false }).limit(10)
     setUserPosts(data || [])
+  }
+
+  async function loadStories() {
+    const { data } = await supabase.from('stories').select('*').order('created_at', { ascending: false })
+    setStories(data || [])
+  }
+
+  async function createStory() {
+    if (!storyTitle.trim() && !storyBody.trim() && !storyImageFile) return
+    setSavingStory(true)
+    let imageUrl = null
+    if (storyImageFile) {
+      const ext = storyImageFile.name.split('.').pop()
+      const path = `story-${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('story-images').upload(path, storyImageFile)
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('story-images').getPublicUrl(path)
+        imageUrl = urlData.publicUrl
+      }
+    }
+    const expiresAt = new Date(Date.now() + 24 * 3600000).toISOString()
+    const { error } = await supabase.from('stories').insert({
+      title: storyTitle.trim() || null,
+      body: storyBody.trim() || null,
+      image_url: imageUrl,
+      bg_color: storyBg,
+      is_platform: true,
+      expires_at: expiresAt,
+    })
+    if (!error) {
+      setStoryTitle(''); setStoryBody(''); setStoryBg('#0f766e'); setStoryImageFile(null)
+      loadStories()
+    } else {
+      alert('Error: ' + error.message)
+    }
+    setSavingStory(false)
+  }
+
+  async function deleteStory(id) {
+    if (!window.confirm('Delete this story?')) return
+    await supabase.from('stories').delete().eq('id', id)
+    loadStories()
+  }
+
+  async function viewPostDetails(p) {
+    setSelectedPost(p)
+    setPostAuthor(null)
+    if (p.user_id) {
+      const { data } = await supabase.from('profiles').select('id, full_name, display_name, is_verified, verification_label, cover_url').eq('id', p.user_id).single()
+      setPostAuthor(data || null)
+    }
   }
 
   async function suspendUser(userId, days) {
@@ -313,6 +379,7 @@ export default function AdminPanel() {
     { key: 'teams', label: '👨‍💼 Teams' },
     { key: 'withdrawals', label: `💰 Withdrawals (${withdrawals.filter(w => w.status === 'pending').length})` },
     { key: 'businesses', label: `🏢 Companies (${businesses.length})` },
+    { key: 'stories', label: `📸 Stories (${stories.length})` },
     { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
@@ -489,8 +556,8 @@ export default function AdminPanel() {
                   <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: theme.textLight }}>✕</button>
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ width: 50, height: 50, borderRadius: '50%', background: selectedUser.avatar_url ? `url(${selectedUser.avatar_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 800, flexShrink: 0 }}>
-                    {!selectedUser.avatar_url && (selectedUser.full_name || selectedUser.display_name || '?')[0]?.toUpperCase()}
+                  <div style={{ width: 50, height: 50, borderRadius: '50%', background: selectedUser.cover_url ? `url(${selectedUser.cover_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 800, flexShrink: 0 }}>
+                    {!selectedUser.cover_url && (selectedUser.full_name || selectedUser.display_name || '?')[0]?.toUpperCase()}
                   </div>
                   <div>
                     <p style={{ margin: '0 0 2px 0', fontWeight: 900, fontSize: 15, color: theme.navy }}>{selectedUser.full_name || 'No full name'}</p>
@@ -500,6 +567,7 @@ export default function AdminPanel() {
                 <div style={{ background: '#fff', borderRadius: 12, padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {[
                     { label: 'User ID', value: selectedUser.id?.slice(0, 16) + '...' },
+                    { label: 'Title', value: selectedUser.verification_label || 'Not set' },
                     { label: 'Specialty', value: selectedUser.specialty || 'Not set' },
                     { label: 'Location', value: selectedUser.location || 'Not set' },
                     { label: 'Verified', value: selectedUser.is_verified ? '✓ Yes' : 'No' },
@@ -513,7 +581,24 @@ export default function AdminPanel() {
                   ))}
                 </div>
 
-                {selectedUser.bio && <p style={{ margin: '0 0 12px 0', fontSize: 13, color: theme.textMid, fontStyle: 'italic' }}>"{selectedUser.bio}"</p>}
+                {/* Contact */}
+                {(phoneMap[selectedUser.id] || selectedUser.website) && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    {phoneMap[selectedUser.id] && (
+                      <a href={`tel:${phoneMap[selectedUser.id]}`} style={{ flex: 1, textAlign: 'center', padding: 10, background: theme.tealGradient, color: '#fff', borderRadius: 12, fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                        📞 Call
+                      </a>
+                    )}
+                    {selectedUser.website && (
+                      <a href={selectedUser.website.startsWith('http') ? selectedUser.website : `https://${selectedUser.website}`} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', padding: 10, background: '#fff', color: theme.tealDeep, border: `1px solid ${theme.tealDeep}`, borderRadius: 12, fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                        🌐 Website
+                      </a>
+                    )}
+                  </div>
+                )}
+                {phoneMap[selectedUser.id] && (
+                  <p style={{ margin: '0 0 10px 0', fontSize: 12, color: theme.textLight, textAlign: 'center' }}>📱 {phoneMap[selectedUser.id]}</p>
+                )}
 
                 {/* Verify */}
                 {!selectedUser.is_verified && (
@@ -570,7 +655,7 @@ export default function AdminPanel() {
             <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
               <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Filter Users</p>
               <input type="text" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Search by name or username..." style={{ ...input, marginBottom: 8 }} />
-              <input type="text" value={userSpecialtyFilter} onChange={(e) => setUserSpecialtyFilter(e.target.value)} placeholder="Filter by specialty..." style={{ ...input, marginBottom: 8 }} />
+              <input type="text" value={userSpecialtyFilter} onChange={(e) => setUserSpecialtyFilter(e.target.value)} placeholder="Filter by title..." style={{ ...input, marginBottom: 8 }} />
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 {['all','verified','unverified'].map(f => (
                   <button key={f} onClick={() => setUserVerifiedFilter(f)} style={{ flex: 1, padding: '6px 0', borderRadius: 10, fontSize: 11, fontWeight: 700, border: 'none', background: userVerifiedFilter === f ? theme.tealDeep : theme.bg, color: userVerifiedFilter === f ? '#fff' : theme.textMid, textTransform: 'capitalize' }}>{f}</button>
@@ -580,7 +665,7 @@ export default function AdminPanel() {
                 const filtered = users.filter(u => {
                   const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
                   const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
-                  const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
+                  const matchSpecialty = !userSpecialtyFilter || (u.verification_label || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
                   return matchSearch && matchVerified && matchSpecialty
                 })
                 exportCSV(filtered, 'users_export.csv')
@@ -590,13 +675,13 @@ export default function AdminPanel() {
             {users.filter(u => {
               const matchSearch = !userSearch || (u.full_name || u.display_name || '').toLowerCase().includes(userSearch.toLowerCase())
               const matchVerified = userVerifiedFilter === 'all' || (userVerifiedFilter === 'verified' ? u.is_verified : !u.is_verified)
-              const matchSpecialty = !userSpecialtyFilter || (u.specialty || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
+              const matchSpecialty = !userSpecialtyFilter || (u.verification_label || '').toLowerCase().includes(userSpecialtyFilter.toLowerCase())
               return matchSearch && matchVerified && matchSpecialty
             }).map(u => (
               <div key={u.id} style={{ ...card, cursor: 'pointer' }} onClick={() => viewUserDetails(u)}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: u.avatar_url ? `url(${u.avatar_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0 }}>
-                    {!u.avatar_url && (u.full_name || u.display_name || '?')[0]?.toUpperCase()}
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: u.cover_url ? `url(${u.cover_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0 }}>
+                    {!u.cover_url && (u.full_name || u.display_name || '?')[0]?.toUpperCase()}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -604,11 +689,17 @@ export default function AdminPanel() {
                       {u.is_verified && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 20 }}>✓</span>}
                     </div>
                     {u.display_name && u.full_name && <p style={{ margin: '0 0 1px 0', fontSize: 11, color: theme.textLight }}>@{u.display_name}</p>}
-                    {u.specialty && <p style={{ margin: '0 0 1px 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>{u.specialty}</p>}
+                    {u.verification_label && <p style={{ margin: '0 0 1px 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>{u.verification_label}</p>}
                     {u.location && <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>📍 {u.location}</p>}
+                    {phoneMap[u.id] && <p style={{ margin: '2px 0 0 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>📱 {phoneMap[u.id]}</p>}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <span style={{ fontSize: 10, color: theme.textLight }}>{timeAgo(u.created_at)}</span>
+                    {phoneMap[u.id] && (
+                      <a href={`tel:${phoneMap[u.id]}`} onClick={(e) => e.stopPropagation()} style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: theme.tealDeep, padding: '3px 10px', borderRadius: 20, textDecoration: 'none' }}>
+                        📞 Call
+                      </a>
+                    )}
                     <span style={{ fontSize: 10, color: theme.tealDeep, fontWeight: 700 }}>Tap to manage →</span>
                   </div>
                 </div>
@@ -619,6 +710,47 @@ export default function AdminPanel() {
 
         {tab === 'posts' && (
           <div>
+            {/* Post Detail Panel */}
+            {selectedPost && (
+              <div style={{ border: `1px solid ${theme.tealBright}`, borderRadius: 16, padding: 16, background: '#ecfdf5', marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: theme.navy }}>📝 Post Detail</h3>
+                  <button onClick={() => { setSelectedPost(null); setPostAuthor(null) }} style={{ background: 'none', border: 'none', fontSize: 18, color: theme.textLight }}>✕</button>
+                </div>
+
+                {/* Author */}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, background: '#fff', borderRadius: 12, padding: 10 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: postAuthor?.cover_url ? `url(${postAuthor.cover_url})` : theme.tealGradient, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                    {!postAuthor?.cover_url && (postAuthor?.full_name || postAuthor?.display_name || '?')[0]?.toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{postAuthor?.full_name || postAuthor?.display_name || 'Unknown user'}</p>
+                      {postAuthor?.is_verified && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 20 }}>✓</span>}
+                    </div>
+                    {postAuthor?.display_name && postAuthor?.full_name && <p style={{ margin: '1px 0 0 0', fontSize: 11, color: theme.textLight }}>@{postAuthor.display_name}</p>}
+                    {postAuthor?.verification_label && <p style={{ margin: '1px 0 0 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>{postAuthor.verification_label}</p>}
+                  </div>
+                </div>
+
+                {/* Meta */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', background: '#fff', padding: '3px 9px', borderRadius: 20 }}>{selectedPost.post_type}</span>
+                  <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(selectedPost.created_at)}</span>
+                </div>
+
+                {/* Full content */}
+                <div style={{ background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                  <p style={{ margin: 0, fontSize: 14, color: theme.textMid, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedPost.content}</p>
+                </div>
+
+                {/* Delete */}
+                <button onClick={() => { deletePost(selectedPost.id); setSelectedPost(null); setPostAuthor(null) }} style={{ width: '100%', padding: 10, background: '#fef2f2', color: theme.alert, border: `1px solid #fca5a5`, borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
+                  🗑️ Delete This Post
+                </button>
+              </div>
+            )}
+
             <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, marginBottom: 12 }}>
               <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>🔍 Filter Posts</p>
               <input type="text" value={postSearch} onChange={(e) => setPostSearch(e.target.value)} placeholder="Search by keyword..." style={{ ...input, marginBottom: 8 }} />
@@ -666,11 +798,14 @@ export default function AdminPanel() {
                   <p style={{ fontSize: 11, color: theme.textLight, margin: '0 0 8px 0' }}>{filtered.length} post{filtered.length !== 1 ? 's' : ''} found</p>
                   {filtered.map(p => (
                     <div key={p.id} style={card}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', background: '#ecfdf5', padding: '2px 7px', borderRadius: 20 }}>{p.post_type}</span>
-                        <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(p.created_at)}</span>
+                      <div onClick={() => viewPostDetails(p)} style={{ cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', background: '#ecfdf5', padding: '2px 7px', borderRadius: 20 }}>{p.post_type}</span>
+                          <span style={{ fontSize: 11, color: theme.textLight }}>{timeAgo(p.created_at)}</span>
+                        </div>
+                        <p style={{ margin: '0 0 6px 0', fontSize: 13, color: theme.textMid }}>{p.content?.slice(0, 150)}{p.content?.length > 150 ? '…' : ''}</p>
+                        <p style={{ margin: '0 0 8px 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>Tap to read full post →</p>
                       </div>
-                      <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textMid }}>{p.content?.slice(0, 150)}</p>
                       <button onClick={() => deletePost(p.id)} style={{ padding: '6px 12px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️ Delete</button>
                     </div>
                   ))}
@@ -989,6 +1124,84 @@ export default function AdminPanel() {
                 </div>
               )
             })()}
+          </div>
+        )}
+
+        {tab === 'stories' && (
+          <div>
+            <div style={card}>
+              <p style={{ margin: '0 0 10px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>📸 Post a Story</p>
+              <p style={{ margin: '0 0 12px 0', fontSize: 11.5, color: theme.textLight }}>Stories appear at the top of the feed for all users and auto-expire after 24 hours.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input value={storyTitle} onChange={(e) => setStoryTitle(e.target.value)} placeholder="Story title (e.g. New Feature!)" style={input} />
+                <textarea value={storyBody} onChange={(e) => setStoryBody(e.target.value)} placeholder="Story message..." rows={3} style={{ ...input, resize: 'none', fontFamily: 'inherit' }} />
+
+                <div>
+                  <p style={{ margin: '0 0 6px 0', fontSize: 11.5, fontWeight: 700, color: theme.textMid }}>Background color (for text stories)</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {['#0f766e', '#0f172a', '#7c3aed', '#be123c', '#c2410c', '#0369a1'].map(c => (
+                      <button key={c} onClick={() => setStoryBg(c)} style={{
+                        width: 34, height: 34, borderRadius: '50%', background: c, cursor: 'pointer',
+                        border: storyBg === c ? '3px solid #000' : '2px solid #fff', boxShadow: '0 0 0 1px #ccc',
+                      }} />
+                    ))}
+                  </div>
+                </div>
+
+                <label style={{ fontSize: 13, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer' }}>
+                  📷 {storyImageFile ? storyImageFile.name : 'Add an image (optional)'}
+                  <input type="file" accept="image/*" onChange={(e) => setStoryImageFile(e.target.files[0] || null)} style={{ display: 'none' }} />
+                </label>
+
+                {/* Preview */}
+                <div style={{
+                  borderRadius: 14, padding: 20, minHeight: 90, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: storyImageFile ? '#e5e7eb' : storyBg, textAlign: 'center',
+                }}>
+                  {storyImageFile ? (
+                    <span style={{ fontSize: 12, color: theme.textMid }}>🖼️ Image selected — text shows over it</span>
+                  ) : (
+                    <div>
+                      {storyTitle && <p style={{ margin: '0 0 6px 0', color: '#fff', fontWeight: 900, fontSize: 16 }}>{storyTitle}</p>}
+                      {storyBody && <p style={{ margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>{storyBody}</p>}
+                      {!storyTitle && !storyBody && <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Preview</p>}
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={createStory} disabled={savingStory} style={{ padding: 11, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
+                  {savingStory ? 'Posting...' : 'Post Story'}
+                </button>
+              </div>
+            </div>
+
+            {/* Active stories */}
+            {stories.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No stories posted yet.</p>}
+            {stories.map(s => {
+              const expired = new Date(s.expires_at) < new Date()
+              return (
+                <div key={s.id} style={{ ...card, opacity: expired ? 0.5 : 1 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{
+                      width: 46, height: 46, borderRadius: 10, flexShrink: 0,
+                      background: s.image_url ? `url(${s.image_url})` : (s.bg_color || theme.tealDeep),
+                      backgroundSize: 'cover', backgroundPosition: 'center',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900,
+                    }}>
+                      {!s.image_url && (s.title?.[0]?.toUpperCase() || '★')}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 13, color: theme.navy }}>{s.title || '(no title)'}</p>
+                      {s.body && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.textMid }}>{s.body.slice(0, 60)}</p>}
+                      <p style={{ margin: 0, fontSize: 11, color: expired ? theme.alert : theme.textLight }}>
+                        {expired ? '⏰ Expired' : `Expires ${timeAgo(s.expires_at).replace(' ago', '')} from now`} · {timeAgo(s.created_at)}
+                      </p>
+                    </div>
+                    <button onClick={() => deleteStory(s.id)} style={{ padding: '6px 10px', background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>🗑️</button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
