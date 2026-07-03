@@ -77,6 +77,16 @@ function Search() {
         @keyframes medmarket-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         .mm-track { display: flex; gap: 12px; width: max-content; animation: medmarket-scroll 30s linear infinite; }
         .mm-track:active { animation-play-state: paused; }
+        @keyframes mm-fade-up {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .mm-card {
+          animation: mm-fade-up 0.4s ease both;
+          transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+        .mm-card:active { transform: scale(0.97); }
+        .mm-hero-in { animation: mm-fade-up 0.5s ease both; }
       `}</style>
 
       <div style={{ background: theme.heroGradient, padding: '24px 18px 22px', borderRadius: '0 0 26px 26px', color: '#fff' }}>
@@ -133,7 +143,7 @@ function Search() {
           <div style={{ overflow: 'hidden', width: '100%' }}>
             <div className="mm-track">
               {[...featured, ...featured].map((p, i) => (
-                <Link key={i} to={`/business/${p.business_id}`} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
+                <Link key={i} className="mm-card" to={`/business/${p.business_id}`} style={{ animationDelay: '0s', textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
                   <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
                     <div style={{ fontSize: 30, marginBottom: 6 }}>{p.emoji || '💊'}</div>
                     <p style={{ margin: '0 0 3px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
@@ -160,8 +170,8 @@ function Search() {
           <EmptyState label="No professionals found" hint="Try another specialty or state." />
         )}
 
-        {products.map((p) => (
-          <Link key={p.id} to={`/business/${p.business_id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
+        {products.map((p, idx) => (
+          <Link key={p.id} className="mm-card" to={`/business/${p.business_id}`} style={{ animationDelay: `${Math.min(idx * 0.04, 0.4)}s`, textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
             <div style={{ fontSize: 26 }}>{p.emoji || '💊'}</div>
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{p.name}{p.category && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 10, marginLeft: 6 }}>{p.category}</span>}</p>
@@ -171,8 +181,8 @@ function Search() {
           </Link>
         ))}
 
-        {businesses.map((b) => (
-          <Link key={b.id} to={`/business/${b.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg }}>
+        {businesses.map((b, idx) => (
+          <Link key={b.id} className="mm-card" to={`/business/${b.id}`} style={{ animationDelay: `${Math.min(idx * 0.04, 0.4)}s`, textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg }}>
             <div style={{ width: 46, height: 46, borderRadius: 10, background: b.cover_url ? `url(${b.cover_url})` : theme.navy, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, flexShrink: 0 }}>
               {!b.cover_url && (b.name?.[0]?.toUpperCase() || '🏥')}
             </div>
@@ -183,8 +193,8 @@ function Search() {
           </Link>
         ))}
 
-        {professionals.map((pr) => (
-          <Link key={pr.id} to={`/u/${pr.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
+        {professionals.map((pr, idx) => (
+          <Link key={pr.id} className="mm-card" to={`/u/${pr.id}`} style={{ animationDelay: `${Math.min(idx * 0.04, 0.4)}s`, textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, flexShrink: 0 }}>
               {(pr.full_name?.[0] || pr.display_name?.[0] || '?').toUpperCase()}
             </div>
