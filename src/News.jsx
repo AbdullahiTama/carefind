@@ -27,7 +27,13 @@ function News() {
   useEffect(() => {
     loadNews()
     checkCanSubmit()
+    markNewsSeen()
   }, [user])
+
+  async function markNewsSeen() {
+    if (!user) return
+    await supabase.from('profiles').update({ news_last_seen: new Date().toISOString() }).eq('id', user.id)
+  }
 
   async function checkCanSubmit() {
     if (!user) { setCanSubmit(false); return }
