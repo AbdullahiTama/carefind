@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
@@ -15,6 +15,13 @@ function PublicProfile() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // Stories for this profile
+  const [userStories, setUserStories] = useState([])
+  const [viewerIndex, setViewerIndex] = useState(null)
+  const [progress, setProgress] = useState(0)
+  const timerRef = useRef(null)
+  const STORY_DURATION = 6000
+
   const visualThemes = {
     teal: 'linear-gradient(135deg, #0f766e, #134e4a)',
     sunset: 'linear-gradient(135deg, #f97316, #db2777)',
@@ -29,7 +36,7 @@ function PublicProfile() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, full_name, display_name, bio, avatar_url, is_verified, verification_label, location, website')
+        .select('id, full_name, display_name, is_verified, verification_label, location, website')
         .eq('id', id)
         .maybeSingle()
 
@@ -40,14 +47,16 @@ function PublicProfile() {
 
       setProfile(profileData)
 
-      const [postData, followerData] = await Promise.all([
+      const [postData, followerData, storyData] = await Promise.all([
         supabase.from('posts').select('id, content, created_at, post_type, theme').eq('user_id', id).order('created_at', { ascending: false }).limit(10),
         supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', id),
+        supabase.from('stories').select('id, title, body, image_url, bg_color, created_at').eq('user_id', id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }),
       ])
 
       setPosts(postData.data || [])
       setFollowerCount(followerData.count || 0)
       setPostCount(postData.data?.length || 0)
+      setUserStories(storyData.data || [])
 
       if (user) {
         const { data: followData } = await supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
@@ -58,6 +67,30 @@ function PublicProfile() {
     }
     load()
   }, [id, user])
+
+  // Story viewer progress
+  useEffect(() => {
+    if (viewerIndex === null) return
+    setProgress(0)
+    const st = userStories[viewerIndex]
+    if (st) supabase.rpc('increment_story_view', { story_id: st.id })
+    const start = Date.now()
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - start
+      const pct = Math.min(100, (elapsed / STORY_DURATION) * 100)
+      setProgress(pct)
+      if (pct >= 100) { clearInterval(timerRef.current); goNext() }
+    }, 50)
+    return () => clearInterval(timerRef.current)
+  }, [viewerIndex])
+
+  function closeViewer() { setViewerIndex(null); if (timerRef.current) clearInterval(timerRef.current) }
+  function goNext() {
+    setViewerIndex((prev) => (prev === null ? null : prev + 1 >= userStories.length ? null : prev + 1))
+  }
+  function goPrev() {
+    setViewerIndex((prev) => (prev === null ? null : prev - 1 < 0 ? 0 : prev - 1))
+  }
 
   async function toggleFollow() {
     if (!user) return
@@ -103,6 +136,7 @@ function PublicProfile() {
 
   const displayName = profile.full_name || profile.display_name || 'CareFind User'
   const isOwnProfile = user?.id === id
+  const hasStory = userStories.length > 0
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
@@ -111,16 +145,31 @@ function PublicProfile() {
           <Link to="/" style={{ position: 'absolute', top: 16, left: 16, color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Feed</Link>
         </div>
         <div style={{ position: 'absolute', bottom: -46, left: 16 }}>
-          <div style={{
-            width: 86, height: 86, borderRadius: '50%',
-            background: profile.avatar_url ? `url(${profile.avatar_url})` : theme.tealGradient,
-            backgroundSize: 'cover', backgroundPosition: 'center',
-            border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: 28, fontWeight: 800,
-          }}>
-            {!profile.avatar_url && (displayName[0]?.toUpperCase() || '?')}
+          {/* Avatar with optional story ring */}
+          <div
+            onClick={() => { if (hasStory) setViewerIndex(0) }}
+            style={{
+              width: 94, height: 94, borderRadius: '50%', padding: hasStory ? 4 : 0,
+              background: hasStory ? `linear-gradient(135deg, ${theme.tealBright}, ${theme.tealDeep})` : 'transparent',
+              cursor: hasStory ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <div style={{
+              width: 86, height: 86, borderRadius: '50%',
+              background: theme.tealGradient,
+              border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 28, fontWeight: 800, boxSizing: 'border-box',
+            }}>
+              {displayName[0]?.toUpperCase() || '?'}
+            </div>
           </div>
+          {hasStory && (
+            <span style={{ display: 'block', textAlign: 'center', fontSize: 10, fontWeight: 800, color: theme.tealDeep, marginTop: 2 }}>
+              Tap to view story
+            </span>
+          )}
         </div>
         <div style={{ position: 'absolute', bottom: -40, right: 16 }}>
           {isOwnProfile ? (
@@ -158,8 +207,7 @@ function PublicProfile() {
             ✓ Verified {profile.verification_label}
           </span>
         )}
-        {profile.bio && <p style={{ margin: '8px 0 6px 0', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{profile.bio}</p>}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, marginTop: 8 }}>
           {profile.location && <span style={{ fontSize: 12.5, color: theme.textLight }}>📍 {profile.location}</span>}
           {profile.website && <a href={profile.website} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: theme.tealDeep, textDecoration: 'none' }}>🔗 {profile.website}</a>}
         </div>
@@ -193,6 +241,54 @@ function PublicProfile() {
           ))}
         </div>
       </div>
+
+      {/* Story viewer */}
+      {viewerIndex !== null && userStories[viewerIndex] && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#000', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: 4, padding: '10px 10px 0' }}>
+            {userStories.map((_, i) => (
+              <div key={i} style={{ flex: 1, height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.3)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 3, background: '#fff', width: i < viewerIndex ? '100%' : i === viewerIndex ? `${progress}%` : '0%', transition: i === viewerIndex ? 'width 0.05s linear' : 'none' }} />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 14 }}>
+              {displayName[0]?.toUpperCase()}
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, color: '#fff', fontSize: 13, fontWeight: 800 }}>{displayName}</p>
+              <p style={{ margin: 0, color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>{timeAgo(userStories[viewerIndex].created_at)}</p>
+            </div>
+            <button onClick={closeViewer} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 26, lineHeight: 1, padding: '0 6px' }}>✕</button>
+          </div>
+
+          <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={goPrev} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '35%', zIndex: 2 }} />
+            <div onClick={goNext} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '35%', zIndex: 2 }} />
+
+            {userStories[viewerIndex].image_url ? (
+              <div style={{ width: '100%', height: '100%', background: `url(${userStories[viewerIndex].image_url})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', background: userStories[viewerIndex].bg_color || theme.tealDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 30, boxSizing: 'border-box' }}>
+                <div style={{ textAlign: 'center', maxWidth: 340 }}>
+                  {userStories[viewerIndex].title && <h2 style={{ color: '#fff', fontSize: 26, fontWeight: 900, margin: '0 0 14px 0', lineHeight: 1.2 }}>{userStories[viewerIndex].title}</h2>}
+                  {userStories[viewerIndex].body && <p style={{ color: 'rgba(255,255,255,0.92)', fontSize: 17, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>{userStories[viewerIndex].body}</p>}
+                </div>
+              </div>
+            )}
+
+            {userStories[viewerIndex].image_url && (userStories[viewerIndex].title || userStories[viewerIndex].body) && (
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 3, padding: '40px 20px 24px', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))' }}>
+                {userStories[viewerIndex].title && <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 900, margin: '0 0 6px 0' }}>{userStories[viewerIndex].title}</h2>}
+                {userStories[viewerIndex].body && <p style={{ color: 'rgba(255,255,255,0.92)', fontSize: 14, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>{userStories[viewerIndex].body}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <BottomNav />
     </div>
   )
