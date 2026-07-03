@@ -90,7 +90,7 @@ function Search() {
     setLoading(false)
   }
 
-  const showingFeatured = tab === 'products' && !query.trim() && !stateFilter && products.length === 0
+  const showingFeatured = tab === 'products' && !query.trim()
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
@@ -172,7 +172,7 @@ function Search() {
       <div style={{ padding: '14px 16px 0' }}>
         {loading && <p style={{ color: theme.textLight, fontSize: 13 }}>Loading…</p>}
 
-        {!loading && tab === 'products' && products.length === 0 && !showingFeatured && (
+        {!loading && tab === 'products' && products.length === 0 && (query.trim() || stateFilter) && (
           <EmptyState label="No products found" hint="Try another name or state." />
         )}
         {!loading && tab === 'businesses' && businesses.length === 0 && (
