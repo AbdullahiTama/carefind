@@ -1,481 +1,255 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 
-const STATES = [
-  'All Nigeria', 'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa',
-  'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu',
-  'FCT Abuja', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi',
-  'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo',
-  'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara',
-]
-
-const CATEGORIES = [
-  { key: 'all', label: '🔍 All', icon: '🔍' },
-  { key: 'medications', label: '💊 Medications', icon: '💊' },
-  { key: 'businesses', label: '🏥 Businesses', icon: '🏥' },
-  { key: 'professionals', label: '🩺 Professionals', icon: '🩺' },
-  { key: 'people', label: '👥 People', icon: '👥' },
-  { key: 'reviews', label: '⭐ Reviews', icon: '⭐' },
-  { key: 'posts', label: '📝 Posts', icon: '📝' },
-]
-
-const BUSINESS_TYPES = ['All Types', 'pharmacy', 'hospital', 'dental', 'optical', 'wellness', 'skincare']
-
-const SPECIALTIES = [
-  'All Specialties',
-  'Pharmacist',
-  'Medical Doctor',
-  'Cardiologist',
-  'Surgeon',
-  'Pediatrician',
-  'Dentist',
-  'Optometrist',
-  'Nurse',
-  'Dermatologist',
-  'Gynaecologist',
-  'Psychiatrist',
-  'Physiotherapist',
-  'Radiologist',
-  'Nutritionist / Dietitian',
-  'Other Healthcare Professional',
-]
-
 function Search() {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('all')
-  const [selectedState, setSelectedState] = useState('All Nigeria')
-  const [businessType, setBusinessType] = useState('All Types')
-  const [showFilters, setShowFilters] = useState(false)
+  const [tab, setTab] = useState('all') // all, businesses, products, professionals
+  const [locationFilter, setLocationFilter] = useState('')
+  const [specialtyFilter, setSpecialtyFilter] = useState('')
+  const [businesses, setBusinesses] = useState([])
+  const [products, setProducts] = useState([])
+  const [professionals, setProfessionals] = useState([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
 
-  const [medicationResults, setMedicationResults] = useState([])
-  const [businessResults, setBusinessResults] = useState([])
-  const [professionalResults, setProfessionalResults] = useState([])
-  const [peopleResults, setPeopleResults] = useState([])
-  const [selectedSpecialty, setSelectedSpecialty] = useState('All Specialties')
-  const [reviewResults, setReviewResults] = useState([])
-  const [postResults, setPostResults] = useState([])
+  // MedMarket featured strip
+  const [featured, setFeatured] = useState([])
 
-  async function handleSearch(e) {
+  useEffect(() => {
+    loadFeatured()
+  }, [])
+
+  async function loadFeatured() {
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, emoji, price, business_id, businesses(name)')
+      .eq('list_on_carefind', true)
+      .order('created_at', { ascending: false })
+      .limit(14)
+    setFeatured(data || [])
+  }
+
+  async function runSearch(e) {
     if (e) e.preventDefault()
-    if (!query.trim() && category === 'all') return
+    if (!query.trim() && !locationFilter.trim() && !specialtyFilter.trim()) return
     setLoading(true)
     setSearched(true)
 
-    const stateFilter = selectedState === 'All Nigeria' ? null : selectedState
+    const q = query.trim()
 
-    if (category === 'all' || category === 'medications') {
-      let q = supabase
-        .from('products')
-        .select('id, name, generic_name, price, stock, emoji, business_id, businesses(name, city, state, whatsapp, visible_on_carefind)')
-        .eq('list_on_carefind', true)
-        .gt('stock', 0)
+    // Businesses
+    if (tab === 'all' || tab === 'businesses') {
+      let bizQuery = supabase.from('businesses').select('id, name, business_type, city, state, cover_url, whatsapp').eq('visible_on_carefind', true)
+      if (q) bizQuery = bizQuery.ilike('name', `%${q}%`)
+      if (locationFilter.trim()) bizQuery = bizQuery.or(`city.ilike.%${locationFilter}%,state.ilike.%${locationFilter}%`)
+      const { data } = await bizQuery.limit(20)
+      setBusinesses(data || [])
+    } else {
+      setBusinesses([])
+    }
 
-      if (query.trim()) q = q.or(`name.ilike.%${query}%,generic_name.ilike.%${query}%`)
-      if (stateFilter) q = q.eq('businesses.state', stateFilter)
+    // Products
+    if (tab === 'all' || tab === 'products') {
+      let prodQuery = supabase.from('products').select('id, name, emoji, price, prescription_required, business_id, businesses(name, city)').eq('list_on_carefind', true)
+      if (q) prodQuery = prodQuery.ilike('name', `%${q}%`)
+      const { data } = await prodQuery.limit(20)
+      setProducts(data || [])
+    } else {
+      setProducts([])
+    }
 
-      const { data } = await q.limit(10)
-      const filtered = (data || []).filter((p) => p.businesses?.visible_on_carefind)
-      setMedicationResults(filtered)
-    } else setMedicationResults([])
-
-    if (category === 'all' || category === 'businesses') {
-      let q = supabase
-        .from('businesses')
-        .select('id, name, address, city, state, business_type, whatsapp, visible_on_carefind')
-
-      if (query.trim()) q = q.ilike('name', `%${query}%`)
-      if (stateFilter) q = q.eq('state', stateFilter)
-      if (businessType !== 'All Types') q = q.eq('business_type', businessType)
-
-      const { data } = await q.limit(10)
-      setBusinessResults(data || [])
-    } else setBusinessResults([])
-
-    if (category === 'all' || category === 'reviews') {
-      let q = supabase
-        .from('reviews')
-        .select('id, rating, comment, created_at, business_id, businesses(name, city, state)')
-
-      if (query.trim()) q = q.ilike('comment', `%${query}%`)
-      if (stateFilter) q = q.eq('businesses.state', stateFilter)
-
-      const { data } = await q.order('created_at', { ascending: false }).limit(8)
-      setReviewResults(data || [])
-    } else setReviewResults([])
-
-    if (category === 'all' || category === 'professionals') {
-      let q = supabase
-        .from('profiles')
-        .select('id, full_name, display_name, avatar_url, bio, specialty, verification_label, location')
-        .eq('is_verified', true)
-
-      if (query.trim()) {
-        q = q.or(`full_name.ilike.%${query}%,display_name.ilike.%${query}%,specialty.ilike.%${query}%,bio.ilike.%${query}%`)
-      }
-      if (selectedSpecialty !== 'All Specialties') q = q.eq('specialty', selectedSpecialty)
-
-      const { data } = await q.limit(10)
-      setProfessionalResults(data || [])
-    } else setProfessionalResults([])
-
-    if (category === 'all' || category === 'people') {
-      if (query.trim()) {
-        let q = supabase
-          .from('profiles')
-          .select('id, full_name, display_name, avatar_url, bio, is_verified, specialty, location')
-          .or(`full_name.ilike.%${query}%,display_name.ilike.%${query}%`)
-          .limit(10)
-
-        const { data } = await q
-        setPeopleResults(data || [])
-      } else setPeopleResults([])
-    } else setPeopleResults([])
-
-    if (category === 'all' || category === 'posts') {
-      let q = supabase
-        .from('posts')
-        .select('id, content, post_type, created_at, user_id, profiles(display_name, full_name)')
-
-      if (query.trim()) q = q.ilike('content', `%${query}%`)
-
-      const { data } = await q.order('created_at', { ascending: false }).limit(8)
-      setPostResults(data || [])
-    } else setPostResults([])
+    // Professionals
+    if (tab === 'all' || tab === 'professionals') {
+      let profQuery = supabase.from('profiles').select('id, full_name, display_name, verification_label, specialty, location, is_verified').eq('is_verified', true)
+      if (q) profQuery = profQuery.or(`full_name.ilike.%${q}%,display_name.ilike.%${q}%`)
+      if (specialtyFilter.trim()) profQuery = profQuery.ilike('specialty', `%${specialtyFilter}%`)
+      if (locationFilter.trim()) profQuery = profQuery.ilike('location', `%${locationFilter}%`)
+      const { data } = await profQuery.limit(20)
+      setProfessionals(data || [])
+    } else {
+      setProfessionals([])
+    }
 
     setLoading(false)
   }
 
-  async function handleCategoryFilter(cat) {
-    setCategory(cat)
-    if (searched) {
-      setTimeout(() => handleSearch(null), 50)
-    }
+  function quickCategory(cat) {
+    setTab(cat)
+    setSearched(true)
+    setLoading(true)
+    // Trigger a broad search for that category
+    setTimeout(() => { runSearch() }, 0)
   }
 
-  function timeAgo(dateStr) {
-    const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return `${Math.floor(diff / 86400)}d ago`
-  }
-
-  const totalResults = medicationResults.length + businessResults.length + professionalResults.length + peopleResults.length + reviewResults.length + postResults.length
-  const hasResults = totalResults > 0
+  const inputStyle = { width: '100%', padding: 13, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, boxSizing: 'border-box' }
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
+      <style>{`
+        @keyframes medmarket-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .mm-track { display: flex; gap: 12px; width: max-content; animation: medmarket-scroll 30s linear infinite; }
+        .mm-track:active { animation-play-state: paused; }
+      `}</style>
 
-      {/* Hero search header */}
-      <div style={{ background: theme.heroGradient, padding: '22px 20px 20px 20px', borderRadius: '0 0 28px 28px', color: '#fff' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 900, margin: '0 0 14px 0', letterSpacing: '-0.01em' }}>Search CareFind</h1>
-
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)',
-            borderRadius: 16, padding: '11px 14px',
-          }}>
-            <span>🔍</span>
+      {/* MedMarket hero */}
+      <div style={{ background: theme.heroGradient, padding: '24px 18px 22px', borderRadius: '0 0 26px 26px', color: '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 24 }}>🛒</span>
+          <h1 style={{ margin: 0, fontSize: 25, fontWeight: 900, letterSpacing: '-0.02em' }}>MedMarket</h1>
+        </div>
+        <p style={{ margin: '0 0 16px 0', fontSize: 13.5, color: 'rgba(255,255,255,0.72)', lineHeight: 1.45 }}>
+          Your health marketplace — find medications, trusted pharmacies, health products and verified professionals near you, all in one place.
+        </p>
+        <form onSubmit={runSearch}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
-              type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Medication, pharmacy, health topic..."
-              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 14 }}
+              placeholder="Search medication, pharmacy, doctor…"
+              style={{ flex: 1, padding: 13, fontSize: 14, border: 'none', borderRadius: 13, boxSizing: 'border-box' }}
             />
-            {query && (
-              <button type="button" onClick={() => setQuery('')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 16 }}>✕</button>
-            )}
+            <button type="submit" style={{ padding: '0 18px', background: '#fff', color: theme.tealDeep, border: 'none', borderRadius: 13, fontWeight: 800, fontSize: 14 }}>Go</button>
           </div>
-          <button type="submit" style={{ padding: '0 16px', fontSize: 13, fontWeight: 800, background: theme.tealBright, color: theme.navy, border: 'none', borderRadius: 14 }}>
-            Go
-          </button>
         </form>
-
-        {/* Filter toggle */}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 700 }}
-        >
-          ⚙️ Filters {selectedState !== 'All Nigeria' || businessType !== 'All Types' ? '●' : ''}
-        </button>
-
-        {showFilters && (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div>
-              <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Location</p>
-              <select
-                value={selectedState}
-                onChange={(e) => setSelectedState(e.target.value)}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 10, border: 'none', fontSize: 13, background: 'rgba(255,255,255,0.12)', color: '#fff' }}
-              >
-                {STATES.map((s) => <option key={s} value={s} style={{ color: '#000' }}>{s}</option>)}
-              </select>
-            </div>
-            {(category === 'all' || category === 'businesses') && (
-              <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Business Type</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {BUSINESS_TYPES.map((bt) => (
-                    <button
-                      key={bt}
-                      onClick={() => setBusinessType(bt)}
-                      style={{
-                        padding: '5px 11px', borderRadius: 12, border: 'none', fontSize: 11.5, fontWeight: 700,
-                        background: businessType === bt ? theme.tealBright : 'rgba(255,255,255,0.1)',
-                        color: businessType === bt ? theme.navy : '#fff', textTransform: 'capitalize',
-                      }}
-                    >
-                      {bt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {(category === 'all' || category === 'professionals') && (
-              <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Specialty</p>
-                <select
-                  value={selectedSpecialty}
-                  onChange={(e) => setSelectedSpecialty(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 10, border: 'none', fontSize: 13, background: 'rgba(255,255,255,0.12)', color: '#fff' }}
-                >
-                  {SPECIALTIES.map((s) => <option key={s} value={s} style={{ color: '#000' }}>{s}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Category tabs */}
-      <div style={{ display: 'flex', gap: 6, padding: '14px 20px 4px', overflowX: 'auto' }}>
-        {CATEGORIES.map((cat) => (
+      {/* Category quick tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, padding: '14px 16px 6px' }}>
+        {[
+          { key: 'products', label: 'Products', icon: '💊' },
+          { key: 'businesses', label: 'Pharmacies', icon: '🏥' },
+          { key: 'professionals', label: 'Doctors', icon: '🩺' },
+          { key: 'all', label: 'All', icon: '🔍' },
+        ].map((c) => (
           <button
-            key={cat.key}
-            onClick={() => handleCategoryFilter(cat.key)}
+            key={c.key}
+            onClick={() => setTab(c.key)}
             style={{
-              flexShrink: 0, padding: '7px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700,
-              border: category === cat.key ? 'none' : `1px solid ${theme.border}`,
-              background: category === cat.key ? theme.tealGradient : theme.cardBg,
-              color: category === cat.key ? '#fff' : theme.textMid,
-              boxShadow: category === cat.key ? '0 2px 8px rgba(15,118,110,0.3)' : 'none',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '12px 4px',
+              borderRadius: 14, border: tab === c.key ? `2px solid ${theme.tealDeep}` : `1px solid ${theme.border}`,
+              background: tab === c.key ? '#ecfdf5' : theme.cardBg, cursor: 'pointer',
             }}
           >
-            {cat.label}
+            <span style={{ fontSize: 22 }}>{c.icon}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: theme.navy }}>{c.label}</span>
           </button>
         ))}
       </div>
 
-      <div style={{ padding: '12px 20px 0 20px' }}>
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '30px 0' }}>
-            <p style={{ color: theme.textLight, fontSize: 13 }}>Searching...</p>
-          </div>
-        )}
-
-        {!loading && searched && !hasResults && (
-          <div style={{ textAlign: 'center', padding: '30px 10px' }}>
-            <div style={{ fontSize: 30, marginBottom: 10 }}>🔍</div>
-            <h3 style={{ fontSize: 15, fontWeight: 800, color: theme.navy, margin: '0 0 4px 0' }}>No results found</h3>
-            <p style={{ fontSize: 13, color: theme.textLight }}>
-              Try different keywords{selectedState !== 'All Nigeria' ? ` or search All Nigeria` : ''}
-            </p>
-          </div>
-        )}
-
-        {/* Medications */}
-        {medicationResults.length > 0 && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
-              💊 Medications ({medicationResults.length})
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-              {medicationResults.map((p) => (
-                <div key={p.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <Link to={`/drug/${encodeURIComponent(p.name)}`} style={{ textDecoration: 'none' }}>
-                    <h3 style={{ margin: '0 0 4px 0', fontSize: 15, fontWeight: 800, color: theme.navy }}>{p.emoji ? `${p.emoji} ` : '💊 '}{p.name}</h3>
-                  </Link>
-                  {p.generic_name && <p style={{ margin: '0 0 4px 0', color: theme.textLight, fontSize: 12.5 }}>Generic: {p.generic_name}</p>}
-                  <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textMid, fontWeight: 600 }}>₦{p.price} · Stock: {p.stock}</p>
-                  {p.businesses && (
-                    <>
-                      <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 13, color: theme.navy }}>{p.businesses.name}</p>
-                      <p style={{ margin: '0 0 8px 0', color: theme.textLight, fontSize: 12 }}>{p.businesses.city}, {p.businesses.state}</p>
-                      {p.businesses.whatsapp && (
-                        <a href={`https://wa.me/${p.businesses.whatsapp}`} target="_blank" rel="noreferrer"
-                          style={{ display: 'inline-block', padding: '7px 14px', background: '#25D366', color: '#fff', borderRadius: 12, textDecoration: 'none', fontSize: 12.5, fontWeight: 700 }}>
-                          WhatsApp
-                        </a>
-                      )}
-                    </>
-                  )}
-                </div>
+      {/* Auto-scrolling featured products */}
+      {featured.length > 0 && !searched && (
+        <div style={{ padding: '10px 0 4px' }}>
+          <p style={{ margin: '0 0 10px 16px', fontSize: 12, fontWeight: 900, color: theme.navy }}>✨ Featured on MedMarket</p>
+          <div style={{ overflow: 'hidden', width: '100%' }}>
+            <div className="mm-track">
+              {[...featured, ...featured].map((p, i) => (
+                <Link key={i} to={`/business/${p.business_id}`} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
+                    <div style={{ fontSize: 30, marginBottom: 6 }}>{p.emoji || '💊'}</div>
+                    <p style={{ margin: '0 0 3px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                    {p.price != null && <p style={{ margin: '0 0 2px 0', fontSize: 12, fontWeight: 700, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+                    <p style={{ margin: 0, fontSize: 10, color: theme.textLight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businesses?.name || ''}</p>
+                  </div>
+                </Link>
               ))}
             </div>
-          </>
+          </div>
+        </div>
+      )}
+
+      {/* Search area */}
+      <div style={{ padding: '10px 16px 0' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto' }}>
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'businesses', label: '🏥 Pharmacies' },
+            { key: 'products', label: '💊 Products' },
+            { key: 'professionals', label: '🩺 Professionals' },
+          ].map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ flexShrink: 0, padding: '7px 13px', borderRadius: 18, fontSize: 12, fontWeight: 700, border: tab === t.key ? 'none' : `1px solid ${theme.border}`, background: tab === t.key ? theme.tealGradient : theme.bg, color: tab === t.key ? '#fff' : theme.textMid }}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} placeholder="📍 Location" style={{ ...inputStyle, flex: 1 }} />
+          {(tab === 'all' || tab === 'professionals') && (
+            <input value={specialtyFilter} onChange={(e) => setSpecialtyFilter(e.target.value)} placeholder="Specialty" style={{ ...inputStyle, flex: 1 }} />
+          )}
+        </div>
+        <button onClick={() => runSearch()} style={{ width: '100%', padding: 12, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, marginBottom: 16 }}>
+          Search MedMarket
+        </button>
+
+        {loading && <p style={{ color: theme.textLight, fontSize: 13 }}>Searching…</p>}
+
+        {searched && !loading && businesses.length === 0 && products.length === 0 && professionals.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '30px 20px' }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: theme.navy, margin: '0 0 4px 0' }}>No results found</p>
+            <p style={{ fontSize: 12.5, color: theme.textLight, margin: 0 }}>Try a different search or location.</p>
+          </div>
         )}
 
         {/* Businesses */}
-        {businessResults.length > 0 && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
-              🏥 Businesses ({businessResults.length})
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-              {businessResults.map((biz) => (
-                <div key={biz.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <Link to={`/business/${biz.id}`} style={{ textDecoration: 'none' }}>
-                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: theme.navy }}>{biz.name}</h3>
-                    </Link>
-                    {!biz.visible_on_carefind && (
-                      <span style={{ fontSize: 9.5, fontWeight: 800, color: theme.warning, background: '#fef3c7', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>
-                        Unclaimed
-                      </span>
-                    )}
-                  </div>
-                  <p style={{ margin: '0 0 4px 0', color: theme.textLight, fontSize: 12.5, textTransform: 'capitalize' }}>
-                    {biz.business_type} · {biz.city}, {biz.state}
-                  </p>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textMid }}>{biz.address}</p>
-                  {biz.whatsapp && (
-                    <a href={`https://wa.me/${biz.whatsapp}`} target="_blank" rel="noreferrer"
-                      style={{ display: 'inline-block', padding: '7px 14px', background: '#25D366', color: '#fff', borderRadius: 12, textDecoration: 'none', fontSize: 12.5, fontWeight: 700 }}>
-                      WhatsApp
-                    </a>
-                  )}
+        {businesses.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', margin: '0 0 8px 0' }}>Pharmacies & Clinics</p>
+            {businesses.map((b) => (
+              <Link key={b.id} to={`/business/${b.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg }}>
+                <div style={{ width: 46, height: 46, borderRadius: 10, background: b.cover_url ? `url(${b.cover_url})` : theme.navy, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, flexShrink: 0 }}>
+                  {!b.cover_url && (b.name?.[0]?.toUpperCase() || '🏥')}
                 </div>
-              ))}
-            </div>
-          </>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{b.name}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight, textTransform: 'capitalize' }}>{b.business_type} · {b.city}{b.state ? `, ${b.state}` : ''}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
 
-        {/* People */}
-        {peopleResults.length > 0 && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
-              👥 People ({peopleResults.length})
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-              {peopleResults.map((p) => (
-                <Link key={p.id} to={`/u/${p.id}`} style={{ textDecoration: 'none' }}>
-                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <div style={{
-                      width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
-                      background: p.avatar_url ? `url(${p.avatar_url})` : 'linear-gradient(135deg, #14b8a6, #0f766e)',
-                      backgroundSize: 'cover', backgroundPosition: 'center',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontSize: 16, fontWeight: 800,
-                    }}>
-                      {!p.avatar_url && (p.full_name || p.display_name || '?')[0]?.toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{p.full_name || p.display_name || 'CareFind User'}</p>
-                        {p.is_verified && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 7px', borderRadius: 20, border: `1px solid ${theme.tealBright}` }}>✓ Verified</span>}
-                      </div>
-                      {p.display_name && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.textLight }}>@{p.display_name}</p>}
-                      {p.is_verified && p.specialty && <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.tealDeep, fontWeight: 700 }}>{p.specialty}</p>}
-                      {p.location && <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>📍 {p.location}</p>}
-                    </div>
-                    <span style={{ color: theme.textLight, fontSize: 16 }}>›</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </>
+        {/* Products */}
+        {products.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', margin: '0 0 8px 0' }}>Products & Medication</p>
+            {products.map((p) => (
+              <Link key={p.id} to={`/business/${p.business_id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
+                <div style={{ fontSize: 26 }}>{p.emoji || '💊'}</div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{p.name} {p.prescription_required && <span style={{ fontSize: 9, fontWeight: 800, color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: 10 }}>Rx</span>}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{p.businesses?.name}{p.businesses?.city ? ` · ${p.businesses.city}` : ''}</p>
+                </div>
+                {p.price != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+              </Link>
+            ))}
+          </div>
         )}
 
         {/* Professionals */}
-        {professionalResults.length > 0 && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
-              🩺 Professionals ({professionalResults.length})
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-              {professionalResults.map((p) => (
-                <Link key={p.id} to={`/u/${p.id}`} style={{ textDecoration: 'none' }}>
-                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <div style={{
-                      width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
-                      background: p.avatar_url ? `url(${p.avatar_url})` : 'linear-gradient(135deg, #14b8a6, #0f766e)',
-                      backgroundSize: 'cover', backgroundPosition: 'center',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontSize: 16, fontWeight: 800,
-                    }}>
-                      {!p.avatar_url && (p.full_name || p.display_name || '?')[0]?.toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: theme.navy }}>{p.full_name || p.display_name || 'Professional'}</p>
-                        <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 7px', borderRadius: 20, border: `1px solid ${theme.tealBright}` }}>✓ Verified</span>
-                      </div>
-                      <p style={{ margin: '0 0 2px 0', fontSize: 12, color: theme.tealDeep, fontWeight: 700 }}>{p.specialty || p.verification_label}</p>
-                      {p.location && <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>📍 {p.location}</p>}
-                      {p.bio && <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: theme.textMid, lineHeight: 1.4 }}>{p.bio.slice(0, 80)}{p.bio.length > 80 ? '...' : ''}</p>}
-                    </div>
-                    <span style={{ color: theme.textLight, fontSize: 16 }}>›</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* Reviews */}
-        {reviewResults.length > 0 && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
-              ⭐ Reviews ({reviewResults.length})
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-              {reviewResults.map((r) => (
-                <div key={r.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  {r.businesses && (
-                    <p style={{ margin: '0 0 4px 0', fontWeight: 700, fontSize: 13, color: theme.navy }}>{r.businesses.name}</p>
-                  )}
-                  <p style={{ margin: '0 0 4px 0', color: theme.warning, fontSize: 13 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
-                  {r.comment && <p style={{ margin: '0 0 4px 0', fontSize: 13.5, color: theme.textMid, lineHeight: 1.5 }}>{r.comment}</p>}
-                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{timeAgo(r.created_at)}</p>
+        {professionals.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', margin: '0 0 8px 0' }}>Health Professionals</p>
+            {professionals.map((pr) => (
+              <Link key={pr.id} to={`/u/${pr.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, flexShrink: 0 }}>
+                  {(pr.full_name?.[0] || pr.display_name?.[0] || '?').toUpperCase()}
                 </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* Posts */}
-        {postResults.length > 0 && (
-          <>
-            <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 10px 0' }}>
-              📝 Posts & Articles ({postResults.length})
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-              {postResults.map((p) => (
-                <div key={p.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: theme.navy }}>
-                      {p.profiles?.full_name || p.profiles?.display_name || 'CareFind User'}
-                    </span>
-                    <span style={{
-                      fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize',
-                      background: '#ecfdf5', color: theme.tealDeep,
-                    }}>
-                      {p.post_type}
-                    </span>
-                  </div>
-                  <p style={{ margin: '0 0 6px 0', fontSize: 13.5, color: theme.textMid, lineHeight: 1.5 }}>
-                    {p.content.length > 150 ? p.content.slice(0, 150) + '...' : p.content}
-                  </p>
-                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{timeAgo(p.created_at)}</p>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{pr.full_name || pr.display_name} <span style={{ color: theme.tealDeep }}>✓</span></p>
+                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{pr.verification_label || pr.specialty}{pr.location ? ` · ${pr.location}` : ''}</p>
                 </div>
-              ))}
-            </div>
-          </>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
 
