@@ -4,6 +4,8 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
+import GiftPanel from './GiftPanel.jsx'
+import SupportPrompt from './SupportPrompt.jsx'
 
 function LiveShow() {
   const { id } = useParams()
@@ -13,7 +15,11 @@ function LiveShow() {
   const [comments, setComments] = useState([])
   const [commentDraft, setCommentDraft] = useState('')
   const [loading, setLoading] = useState(true)
+  const [likeCount, setLikeCount] = useState(0)
+  const [hearts, setHearts] = useState([])
+  const [gifting, setGifting] = useState(false)
   const pollRef = useRef(null)
+  const heartId = useRef(0)
 
   const isHost = user && show && (user.id === show.host_id || user.id === show.guest_id)
 
@@ -23,9 +29,33 @@ function LiveShow() {
     pollRef.current = setInterval(() => {
       loadItems()
       loadComments()
+      loadLikes()
     }, 4000)
     return () => clearInterval(pollRef.current)
   }, [id])
+
+  async function loadLikes() {
+    const { count } = await supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id)
+    setLikeCount(count || 0)
+  }
+
+  function spawnHeart() {
+    const hid = heartId.current++
+    const left = 20 + Math.random() * 55 // random horizontal position
+    const emoji = ['❤️', '💚', '💛', '🧡', '💜'][Math.floor(Math.random() * 5)]
+    setHearts(prev => [...prev, { id: hid, left, emoji }])
+    setTimeout(() => setHearts(prev => prev.filter(h => h.id !== hid)), 2500)
+  }
+
+  async function tapLike() {
+    spawnHeart()
+    setLikeCount(c => c + 1)
+    await supabase.from('live_reactions').insert({ show_id: id, user_id: user?.id || null })
+  }
+
+  function shareLive() {
+    if (navigator.share) navigator.share({ title: show?.title || 'CareFind Live', text: 'Watch this live on CareFind', url: window.location.href })
+  }
 
   async function loadShow() {
     setLoading(true)
@@ -37,6 +67,7 @@ function LiveShow() {
     setShow(data || null)
     await loadItems()
     await loadComments()
+    await loadLikes()
     setLoading(false)
   }
 
@@ -158,11 +189,14 @@ function LiveShow() {
                   })()}
                 </div>
               ) : (
-              <div style={{ background: theme.bg, borderRadius: 14, padding: it.kind === 'image' ? 4 : '10px 14px', display: 'inline-block', maxWidth: '100%' }}>
+              <div style={{ background: theme.bg, borderRadius: 14, padding: (it.kind === 'image' || it.kind === 'video') ? 4 : '10px 14px', display: 'inline-block', maxWidth: '100%' }}>
                 {it.kind === 'text' && <p style={{ margin: 0, fontSize: 14.5, color: theme.textDark, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{it.content}</p>}
                 {it.kind === 'image' && <img src={it.content} alt="live" style={{ maxWidth: '100%', borderRadius: 11, display: 'block' }} />}
                 {it.kind === 'voice' && (
                   <audio controls preload="metadata" playsInline src={it.content} style={{ height: 40, maxWidth: 240 }} />
+                )}
+                {it.kind === 'video' && (
+                  <video controls playsInline preload="metadata" src={it.content} style={{ maxWidth: '100%', borderRadius: 11, display: 'block' }} />
                 )}
               </div>
               )}
@@ -170,6 +204,44 @@ function LiveShow() {
           </div>
         ))}
       </div>
+
+      {/* Floating hearts overlay */}
+      <style>{`
+        @keyframes floatUp {
+          0% { transform: translateY(0) scale(0.7); opacity: 0; }
+          15% { opacity: 1; transform: translateY(-10px) scale(1.1); }
+          100% { transform: translateY(-220px) scale(1); opacity: 0; }
+        }
+      `}</style>
+      <div style={{ position: 'fixed', bottom: 130, left: 0, right: 0, maxWidth: 480, margin: '0 auto', height: 0, pointerEvents: 'none', zIndex: 500 }}>
+        {hearts.map(h => (
+          <span key={h.id} style={{ position: 'absolute', bottom: 0, left: `${h.left}%`, fontSize: 28, animation: 'floatUp 2.5s ease-out forwards' }}>{h.emoji}</span>
+        ))}
+      </div>
+
+      {/* Live engagement bar */}
+      {isLive && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '10px 8px', borderTop: `1px solid ${theme.border}`, borderBottom: `8px solid ${theme.bg}` }}>
+          <button onClick={tapLike} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <span style={{ fontSize: 22 }}>❤️</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>{likeCount > 0 ? likeCount : 'Like'}</span>
+          </button>
+          {show.host_id && (
+            <button onClick={() => user ? setGifting(true) : (window.location.href = '/login')} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+              <span style={{ fontSize: 22 }}>🎁</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Gift</span>
+            </button>
+          )}
+          <button onClick={shareLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <span style={{ fontSize: 22 }}>🔗</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Share</span>
+          </button>
+          <button onClick={shareLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <span style={{ fontSize: 22 }}>🔁</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Repost</span>
+          </button>
+        </div>
+      )}
 
       {/* Comments section */}
       <div style={{ borderTop: `8px solid ${theme.bg}`, marginTop: 12, padding: '14px 16px' }}>
@@ -210,6 +282,12 @@ function LiveShow() {
           </div>
         ))}
       </div>
+
+      {show.host_id && <SupportPrompt onGift={() => user ? setGifting(true) : (window.location.href = '/login')} creatorName={hostName()} />}
+
+      {gifting && (
+        <GiftPanel postId={show.id} recipientId={show.host_id} onClose={() => setGifting(false)} />
+      )}
 
       <BottomNav />
     </div>
