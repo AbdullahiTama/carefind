@@ -143,6 +143,21 @@ function LiveShow() {
                 {it.profiles?.full_name || it.profiles?.display_name || 'CareFind'}
                 <span style={{ color: theme.textLight, fontWeight: 500, marginLeft: 6 }}>{timeAgo(it.created_at)}</span>
               </p>
+              {it.kind === 'slide' ? (
+                <div style={{ maxWidth: '100%' }}>
+                  {(() => {
+                    const [surl, num, total] = (it.content || '').split('|||')
+                    return (
+                      <div style={{ border: `2px solid ${theme.tealDeep}`, borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+                        <div style={{ background: theme.tealDeep, color: '#fff', padding: '5px 12px', fontSize: 11, fontWeight: 800, display: 'flex', justifyContent: 'space-between' }}>
+                          <span>📑 SLIDE {num || '?'}{total ? ` / ${total}` : ''}</span>
+                        </div>
+                        <img src={surl} alt={`Slide ${num}`} style={{ width: '100%', display: 'block' }} />
+                      </div>
+                    )
+                  })()}
+                </div>
+              ) : (
               <div style={{ background: theme.bg, borderRadius: 14, padding: it.kind === 'image' ? 4 : '10px 14px', display: 'inline-block', maxWidth: '100%' }}>
                 {it.kind === 'text' && <p style={{ margin: 0, fontSize: 14.5, color: theme.textDark, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{it.content}</p>}
                 {it.kind === 'image' && <img src={it.content} alt="live" style={{ maxWidth: '100%', borderRadius: 11, display: 'block' }} />}
@@ -150,6 +165,7 @@ function LiveShow() {
                   <audio controls preload="metadata" playsInline src={it.content} style={{ height: 40, maxWidth: 240 }} />
                 )}
               </div>
+              )}
             </div>
           </div>
         ))}
