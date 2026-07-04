@@ -147,7 +147,7 @@ function LiveShow() {
                 {it.kind === 'text' && <p style={{ margin: 0, fontSize: 14.5, color: theme.textDark, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{it.content}</p>}
                 {it.kind === 'image' && <img src={it.content} alt="live" style={{ maxWidth: '100%', borderRadius: 11, display: 'block' }} />}
                 {it.kind === 'voice' && (
-                  <audio controls src={it.content} style={{ height: 40, maxWidth: 240 }} />
+                  <audio controls preload="metadata" playsInline src={it.content} style={{ height: 40, maxWidth: 240 }} />
                 )}
               </div>
             </div>
