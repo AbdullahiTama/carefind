@@ -9,6 +9,7 @@ import GiftPanel from './GiftPanel.jsx'
 import VisualCard from './VisualCard.jsx'
 import ArticleEditor from './ArticleEditor.jsx'
 import GoLive from './GoLive.jsx'
+import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
 import { useRef } from 'react'
 
@@ -1193,6 +1194,7 @@ function Feed() {
         ))}
       </div>
       {showGoLive && <GoLive onClose={() => setShowGoLive(false)} />}
+      <SupportPrompt creatorName="CareFind creators" />
       <BottomNav />
       {giftingPost && (
         <GiftPanel
