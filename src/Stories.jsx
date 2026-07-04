@@ -17,6 +17,7 @@ function Stories() {
   const [sBg, setSBg] = useState('#0f766e')
   const [sImage, setSImage] = useState(null)
   const [posting, setPosting] = useState(false)
+  const [liveShow, setLiveShow] = useState(null)
   const timerRef = useRef(null)
 
   const STORY_DURATION = 6000
@@ -24,7 +25,18 @@ function Stories() {
   useEffect(() => {
     loadStories()
     checkCanPost()
+    loadLiveShow()
   }, [user])
+
+  async function loadLiveShow() {
+    const { data } = await supabase
+      .from('live_shows')
+      .select('id, title, host_id, profiles!live_shows_host_id_fkey(full_name, display_name)')
+      .eq('status', 'live')
+      .order('started_at', { ascending: false })
+      .limit(1)
+    setLiveShow(data && data[0] ? data[0] : null)
+  }
 
   async function checkCanPost() {
     if (!user) { setCanPost(false); return }
@@ -121,15 +133,27 @@ function Stories() {
   }
 
   const hasStories = stories.length > 0
-  if (!hasStories && !canPost) return null
+  if (!hasStories && !canPost && !liveShow) return null
 
   return (
     <>
+      <style>{`@keyframes cf-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.6); } 50% { box-shadow: 0 0 0 6px rgba(220,38,38,0); } }`}</style>
       {/* Story row */}
       <div style={{
         display: 'flex', gap: 14, overflowX: 'auto', padding: '4px 2px 2px',
         marginTop: 16, marginBottom: 4, WebkitOverflowScrolling: 'touch',
       }}>
+        {/* LIVE show indicator (first) */}
+        {liveShow && (
+          <a href={`/live-show/${liveShow.id}`} style={{ flexShrink: 0, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, width: 70 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', padding: 3, background: '#dc2626', position: 'relative', animation: 'cf-pulse 1.5s infinite' }}>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: theme.tealGradient, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 24, fontWeight: 900 }}>📡</div>
+              <span style={{ position: 'absolute', bottom: -2, left: '50%', transform: 'translateX(-50%)', background: '#dc2626', color: '#fff', fontSize: 8, fontWeight: 900, padding: '1px 6px', borderRadius: 8, letterSpacing: '0.05em' }}>LIVE</span>
+            </div>
+            <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', maxWidth: 68, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Live now</span>
+          </a>
+        )}
+
         {/* Add-to-story button */}
         {canPost && (
           <button
