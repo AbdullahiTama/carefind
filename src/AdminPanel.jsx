@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
+import VoiceRecorder from './VoiceRecorder.jsx'
 
 function hashPassword(p) { return `cf_hashed_${p}` }
 
@@ -293,6 +294,11 @@ export default function AdminPanel() {
 
   async function hideLiveComment(cid, showId) {
     await supabase.from('live_comments').update({ hidden: true }).eq('id', cid)
+    loadLiveControl(showId)
+  }
+
+  async function postLiveVoice(showId, url) {
+    await supabase.from('live_items').insert({ show_id: showId, sender_id: null, kind: 'voice', content: url })
     loadLiveControl(showId)
   }
 
@@ -1624,6 +1630,7 @@ export default function AdminPanel() {
                     </button>
 
                     <textarea value={liveDraft} onChange={(e) => setLiveDraft(e.target.value)} placeholder="Type something to broadcast live…" rows={2} style={{ ...input, resize: 'none', fontFamily: 'inherit', marginBottom: 6 }} />
+                    <VoiceRecorder showId={s.id} onRecorded={(url) => postLiveVoice(s.id, url)} />
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
                       <label style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', flex: 1 }}>
                         📷 {liveImage ? liveImage.name.slice(0, 16) : 'Add image'}
@@ -1642,6 +1649,7 @@ export default function AdminPanel() {
                           <div key={it.id} style={{ background: theme.bg, borderRadius: 8, padding: it.kind === 'image' ? 4 : '6px 10px', marginBottom: 4 }}>
                             {it.kind === 'text' && <p style={{ margin: 0, fontSize: 12.5, color: theme.textDark }}>{it.content}</p>}
                             {it.kind === 'image' && <img src={it.content} alt="" style={{ maxWidth: 120, borderRadius: 6, display: 'block' }} />}
+                            {it.kind === 'voice' && <audio controls src={it.content} style={{ height: 32, maxWidth: 180 }} />}
                           </div>
                         ))}
                       </div>
