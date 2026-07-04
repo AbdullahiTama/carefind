@@ -5,6 +5,8 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import VoiceRecorder from './VoiceRecorder.jsx'
 import SlideUploader from './SlideUploader.jsx'
+import VideoUploader from './VideoUploader.jsx'
+import VideoRecorder from './VideoRecorder.jsx'
 
 function LiveDashboard() {
   const { id } = useParams()
@@ -103,6 +105,11 @@ function LiveDashboard() {
     loadItems()
   }
 
+  async function sendVideo(url) {
+    await supabase.from('live_items').insert({ show_id: id, sender_id: user.id, kind: 'video', content: url })
+    loadItems()
+  }
+
   async function endShow() {
     if (!window.confirm('End this live show for everyone?')) return
     await supabase.from('live_shows').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', id)
@@ -176,6 +183,8 @@ function LiveDashboard() {
             </div>
             <VoiceRecorder showId={id} onRecorded={sendVoice} />
             <SlideUploader showId={id} onPostSlide={sendSlide} />
+            <VideoRecorder showId={id} onRecorded={sendVideo} />
+            <VideoUploader showId={id} onUploaded={sendVideo} />
             <p style={{ margin: '4px 0 0 0', fontSize: 10.5, color: theme.textLight }}>Post text, images, or voice notes — they go live instantly.</p>
           </div>
         </>
@@ -194,6 +203,7 @@ function LiveDashboard() {
               {it.kind === 'text' && <p style={{ margin: 0, fontSize: 13.5, color: theme.textDark, whiteSpace: 'pre-wrap' }}>{it.content}</p>}
               {it.kind === 'image' && <img src={it.content} alt="posted" style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />}
               {it.kind === 'voice' && <audio controls src={it.content} style={{ height: 36, maxWidth: 220 }} />}
+              {it.kind === 'video' && <video controls playsInline src={it.content} style={{ maxWidth: 200, borderRadius: 8, display: 'block' }} />}
               {it.kind === 'slide' && <div><span style={{ fontSize: 10, fontWeight: 800, color: theme.tealDeep }}>📑 Slide {(it.content||'').split('|||')[1]}</span><img src={(it.content||'').split('|||')[0]} alt="slide" style={{ maxWidth: '100%', borderRadius: 8, display: 'block', marginTop: 3 }} /></div>}
             </div>
           </div>
