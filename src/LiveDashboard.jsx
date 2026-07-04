@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
+import VoiceRecorder from './VoiceRecorder.jsx'
 
 function LiveDashboard() {
   const { id } = useParams()
@@ -91,6 +92,11 @@ function LiveDashboard() {
     loadComments()
   }
 
+  async function sendVoice(url) {
+    await supabase.from('live_items').insert({ show_id: id, sender_id: user.id, kind: 'voice', content: url })
+    loadItems()
+  }
+
   async function endShow() {
     if (!window.confirm('End this live show for everyone?')) return
     await supabase.from('live_shows').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', id)
@@ -162,7 +168,8 @@ function LiveDashboard() {
                 {sending ? 'Sending…' : '📡 Post Live'}
               </button>
             </div>
-            <p style={{ margin: '8px 0 0 0', fontSize: 10.5, color: theme.textLight }}>🎙 Voice notes coming next. For now, post text and images.</p>
+            <VoiceRecorder showId={id} onRecorded={sendVoice} />
+            <p style={{ margin: '4px 0 0 0', fontSize: 10.5, color: theme.textLight }}>Post text, images, or voice notes — they go live instantly.</p>
           </div>
         </>
       )}
