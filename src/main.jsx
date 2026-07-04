@@ -21,6 +21,7 @@ import ProfessionalMonetization from './ProfessionalMonetization.jsx'
 import AdminLogin from './AdminLogin.jsx'
 import News from './News.jsx'
 import NewsArticle from './NewsArticle.jsx'
+import LiveSession from './LiveSession.jsx'
 
 const AdminPanel = lazy(() => import('./AdminPanel.jsx'))
 
@@ -53,6 +54,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/earn" element={<ProfessionalMonetization />} />
           <Route path="/news" element={<News />} />
           <Route path="/news/:id" element={<NewsArticle />} />
+          <Route path="/live/:id" element={<LiveSession />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="/admin-panel" element={<Suspense fallback={<Loading />}><AdminPanel /></Suspense>} />
