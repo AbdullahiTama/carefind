@@ -97,6 +97,11 @@ export default function AdminPanel() {
   const [activeShows, setActiveShows] = useState([])
   const [creatingShow, setCreatingShow] = useState(false)
   const [guestSearch, setGuestSearch] = useState('')
+  const [liveItems, setLiveItems] = useState([])
+  const [liveComments, setLiveComments] = useState([])
+  const [liveDraft, setLiveDraft] = useState('')
+  const [liveImage, setLiveImage] = useState(null)
+  const [postingLive, setPostingLive] = useState(false)
   const [selectedPost, setSelectedPost] = useState(null)
   const [postAuthor, setPostAuthor] = useState(null)
   const [phoneMap, setPhoneMap] = useState({})
@@ -225,20 +230,16 @@ export default function AdminPanel() {
   async function startLiveShow() {
     if (!liveTitle.trim()) { alert('Add a show title'); return }
     setCreatingShow(true)
-    // Host = the admin's own profile id. Use adminUser id if it maps to a profile; fallback to first super admin.
-    const hostId = adminUser?.profile_id || adminUser?.id || null
+    // Admin login isn't a profile row, so host_id stays null and we mark it a platform show.
     const { data: show, error } = await supabase.from('live_shows').insert({
       title: liveTitle.trim(),
       status: 'live',
-      host_id: hostId,
+      host_id: null,
+      is_platform: true,
     }).select().maybeSingle()
     if (error || !show) { alert('Could not start show: ' + (error?.message || 'unknown')); setCreatingShow(false); return }
 
-    // Add host as participant
-    if (hostId) {
-      await supabase.from('live_participants').insert({ show_id: show.id, user_id: hostId, role: 'host', joined: true })
-    }
-    // Add guests + notify them
+    // Add guests as participants + notify them (they ARE real profiles)
     for (const g of liveGuests) {
       await supabase.from('live_participants').insert({ show_id: show.id, user_id: g.id, role: 'guest' })
       await supabase.from('notifications').insert({
@@ -251,13 +252,48 @@ export default function AdminPanel() {
     setLiveTitle(''); setLiveGuests([]); setGuestSearch('')
     setCreatingShow(false)
     loadActiveShows()
-    alert('Live show started! Open the control room to begin posting.')
+    alert('Live show started! Open the Control Room to begin posting.')
   }
 
   async function endLiveShow(showId) {
     if (!window.confirm('End this live show?')) return
     await supabase.from('live_shows').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', showId)
     loadActiveShows()
+  }
+
+  async function loadLiveControl(showId) {
+    const [itemsRes, commentsRes] = await Promise.all([
+      supabase.from('live_items').select('id, kind, content, created_at').eq('show_id', showId).order('created_at', { ascending: true }),
+      supabase.from('live_comments').select('id, content, hidden, created_at, profiles(full_name, display_name)').eq('show_id', showId).order('created_at', { ascending: false }).limit(60),
+    ])
+    setLiveItems(itemsRes.data || [])
+    setLiveComments(commentsRes.data || [])
+  }
+
+  async function postLiveItem(showId) {
+    if (!liveDraft.trim() && !liveImage) return
+    setPostingLive(true)
+    if (liveImage) {
+      const ext = liveImage.name.split('.').pop()
+      const path = `live-${showId}-${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('live-media').upload(path, liveImage)
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('live-media').getPublicUrl(path)
+        await supabase.from('live_items').insert({ show_id: showId, sender_id: null, kind: 'image', content: urlData.publicUrl })
+      }
+      setLiveImage(null)
+    }
+    if (liveDraft.trim()) {
+      await supabase.from('live_items').insert({ show_id: showId, sender_id: null, kind: 'text', content: liveDraft.trim() })
+      setLiveDraft('')
+    }
+    setPostingLive(false)
+    loadLiveControl(showId)
+  }
+
+  async function hideLiveComment(cid, showId) {
+    await supabase.from('live_comments').update({ hidden: true }).eq('id', cid)
+    loadLiveControl(showId)
   }
 
   async function loadSearchLogs() {
@@ -1572,13 +1608,59 @@ export default function AdminPanel() {
               <div style={card}>
                 <p style={{ margin: '0 0 10px 0', fontWeight: 800, fontSize: 14, color: '#dc2626' }}>🔴 Currently Live</p>
                 {activeShows.map(s => (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: `1px solid ${theme.border}` }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: theme.navy }}>{s.title}</p>
-                      <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Started {new Date(s.started_at).toLocaleTimeString()}</p>
+                  <div key={s.id} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${theme.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: theme.navy }}>{s.title}</p>
+                        <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Started {new Date(s.started_at).toLocaleTimeString()}</p>
+                      </div>
+                      <a href={`/live-show/${s.id}`} style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '6px 10px', borderRadius: 16, textDecoration: 'none' }}>👁 Audience</a>
+                      <button onClick={() => endLiveShow(s.id)} style={{ fontSize: 11, fontWeight: 700, color: theme.alert, background: '#fef2f2', border: 'none', padding: '6px 10px', borderRadius: 16 }}>End</button>
                     </div>
-                    <a href={`/live-dashboard/${s.id}`} style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: theme.tealDeep, padding: '6px 12px', borderRadius: 16, textDecoration: 'none' }}>Control Room</a>
-                    <button onClick={() => endLiveShow(s.id)} style={{ fontSize: 11, fontWeight: 700, color: theme.alert, background: '#fef2f2', border: 'none', padding: '6px 10px', borderRadius: 16 }}>End</button>
+
+                    {/* Control room: post to this show */}
+                    <button onClick={() => loadLiveControl(s.id)} style={{ width: '100%', padding: 8, background: theme.bg, color: theme.navy, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, marginBottom: 8 }}>
+                      🎛 Load Control Room
+                    </button>
+
+                    <textarea value={liveDraft} onChange={(e) => setLiveDraft(e.target.value)} placeholder="Type something to broadcast live…" rows={2} style={{ ...input, resize: 'none', fontFamily: 'inherit', marginBottom: 6 }} />
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+                      <label style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', flex: 1 }}>
+                        📷 {liveImage ? liveImage.name.slice(0, 16) : 'Add image'}
+                        <input type="file" accept="image/*" onChange={(e) => setLiveImage(e.target.files[0] || null)} style={{ display: 'none' }} />
+                      </label>
+                      <button onClick={() => postLiveItem(s.id)} disabled={postingLive} style={{ padding: '8px 18px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}>
+                        {postingLive ? 'Posting…' : '📡 Post Live'}
+                      </button>
+                    </div>
+
+                    {/* Posted items */}
+                    {liveItems.length > 0 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <p style={{ margin: '0 0 6px 0', fontSize: 10.5, fontWeight: 800, color: theme.textLight, textTransform: 'uppercase' }}>Posted ({liveItems.length})</p>
+                        {liveItems.map(it => (
+                          <div key={it.id} style={{ background: theme.bg, borderRadius: 8, padding: it.kind === 'image' ? 4 : '6px 10px', marginBottom: 4 }}>
+                            {it.kind === 'text' && <p style={{ margin: 0, fontSize: 12.5, color: theme.textDark }}>{it.content}</p>}
+                            {it.kind === 'image' && <img src={it.content} alt="" style={{ maxWidth: 120, borderRadius: 6, display: 'block' }} />}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Audience comments to moderate */}
+                    {liveComments.length > 0 && (
+                      <div>
+                        <p style={{ margin: '0 0 6px 0', fontSize: 10.5, fontWeight: 800, color: theme.textLight, textTransform: 'uppercase' }}>💬 Audience comments</p>
+                        {liveComments.map(c => (
+                          <div key={c.id} style={{ display: 'flex', gap: 6, marginBottom: 5, opacity: c.hidden ? 0.4 : 1 }}>
+                            <span style={{ flex: 1, fontSize: 12, color: theme.textMid }}>
+                              <strong style={{ color: theme.navy }}>{c.profiles?.full_name || c.profiles?.display_name || 'User'}:</strong> {c.content}
+                            </span>
+                            {!c.hidden && <button onClick={() => hideLiveComment(c.id, s.id)} style={{ background: 'none', border: 'none', color: theme.alert, fontSize: 10.5, fontWeight: 700 }}>Hide</button>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
