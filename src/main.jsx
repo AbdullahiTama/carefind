@@ -22,6 +22,8 @@ import AdminLogin from './AdminLogin.jsx'
 import News from './News.jsx'
 import NewsArticle from './NewsArticle.jsx'
 import LiveSession from './LiveSession.jsx'
+import Notifications from './Notifications.jsx'
+import LiveShow from './LiveShow.jsx'
 
 const AdminPanel = lazy(() => import('./AdminPanel.jsx'))
 
@@ -55,6 +57,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/news" element={<News />} />
           <Route path="/news/:id" element={<NewsArticle />} />
           <Route path="/live/:id" element={<LiveSession />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/live-show/:id" element={<LiveShow />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin-login" element={<AdminLogin />} />
           <Route path="/admin-panel" element={<Suspense fallback={<Loading />}><AdminPanel /></Suspense>} />
