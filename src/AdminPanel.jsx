@@ -92,6 +92,11 @@ export default function AdminPanel() {
   const [promoImage, setPromoImage] = useState(null)
   const [savingPromo, setSavingPromo] = useState(false)
   const [searchLogs, setSearchLogs] = useState([])
+  const [liveTitle, setLiveTitle] = useState('')
+  const [liveGuests, setLiveGuests] = useState([])
+  const [activeShows, setActiveShows] = useState([])
+  const [creatingShow, setCreatingShow] = useState(false)
+  const [guestSearch, setGuestSearch] = useState('')
   const [selectedPost, setSelectedPost] = useState(null)
   const [postAuthor, setPostAuthor] = useState(null)
   const [phoneMap, setPhoneMap] = useState({})
@@ -202,7 +207,58 @@ export default function AdminPanel() {
     setLoading(false)
   }
 
-  useEffect(() => { if (adminUser) { loadStories(); loadNews(); loadPromotions(); loadSearchLogs() } }, [adminUser])
+  useEffect(() => { if (adminUser) { loadStories(); loadNews(); loadPromotions(); loadSearchLogs(); loadActiveShows() } }, [adminUser])
+
+  async function loadActiveShows() {
+    const { data } = await supabase
+      .from('live_shows')
+      .select('id, title, status, started_at, host_id')
+      .eq('status', 'live')
+      .order('started_at', { ascending: false })
+    setActiveShows(data || [])
+  }
+
+  function toggleGuest(u) {
+    setLiveGuests(prev => prev.some(g => g.id === u.id) ? prev.filter(g => g.id !== u.id) : [...prev, u])
+  }
+
+  async function startLiveShow() {
+    if (!liveTitle.trim()) { alert('Add a show title'); return }
+    setCreatingShow(true)
+    // Host = the admin's own profile id. Use adminUser id if it maps to a profile; fallback to first super admin.
+    const hostId = adminUser?.profile_id || adminUser?.id || null
+    const { data: show, error } = await supabase.from('live_shows').insert({
+      title: liveTitle.trim(),
+      status: 'live',
+      host_id: hostId,
+    }).select().maybeSingle()
+    if (error || !show) { alert('Could not start show: ' + (error?.message || 'unknown')); setCreatingShow(false); return }
+
+    // Add host as participant
+    if (hostId) {
+      await supabase.from('live_participants').insert({ show_id: show.id, user_id: hostId, role: 'host', joined: true })
+    }
+    // Add guests + notify them
+    for (const g of liveGuests) {
+      await supabase.from('live_participants').insert({ show_id: show.id, user_id: g.id, role: 'guest' })
+      await supabase.from('notifications').insert({
+        recipient_id: g.id,
+        type: 'live_invite',
+        message: `invited you to co-host a live show: "${liveTitle.trim()}"`,
+        link: `/live-dashboard/${show.id}`,
+      })
+    }
+    setLiveTitle(''); setLiveGuests([]); setGuestSearch('')
+    setCreatingShow(false)
+    loadActiveShows()
+    alert('Live show started! Open the control room to begin posting.')
+  }
+
+  async function endLiveShow(showId) {
+    if (!window.confirm('End this live show?')) return
+    await supabase.from('live_shows').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', showId)
+    loadActiveShows()
+  }
 
   async function loadSearchLogs() {
     const { data } = await supabase.from('search_logs').select('id, query, category, results_count, found, user_id, created_at, profiles(full_name, display_name)').order('created_at', { ascending: false }).limit(300)
@@ -483,6 +539,7 @@ export default function AdminPanel() {
     { key: 'news', label: `📰 News (${newsItems.filter(n => n.status === 'pending').length})` },
     { key: 'promotions', label: `🎯 Promos (${promotions.filter(p => !p.expires_at || new Date(p.expires_at) > new Date()).length})` },
     { key: 'searches', label: `🔎 Searches (${searchLogs.filter(s => !s.found).length})` },
+    { key: 'golive', label: `📡 Go Live (${activeShows.length})` },
     { key: 'notifications', label: `🔔 All Alerts (${notifCount})` },
   ]
 
@@ -1505,6 +1562,58 @@ export default function AdminPanel() {
                 </>
               )
             })()}
+          </div>
+        )}
+
+        {tab === 'golive' && (
+          <div>
+            {/* Active shows */}
+            {activeShows.length > 0 && (
+              <div style={card}>
+                <p style={{ margin: '0 0 10px 0', fontWeight: 800, fontSize: 14, color: '#dc2626' }}>🔴 Currently Live</p>
+                {activeShows.map(s => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: `1px solid ${theme.border}` }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: theme.navy }}>{s.title}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Started {new Date(s.started_at).toLocaleTimeString()}</p>
+                    </div>
+                    <a href={`/live-dashboard/${s.id}`} style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: theme.tealDeep, padding: '6px 12px', borderRadius: 16, textDecoration: 'none' }}>Control Room</a>
+                    <button onClick={() => endLiveShow(s.id)} style={{ fontSize: 11, fontWeight: 700, color: theme.alert, background: '#fef2f2', border: 'none', padding: '6px 10px', borderRadius: 16 }}>End</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Start a new show */}
+            <div style={card}>
+              <p style={{ margin: '0 0 6px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>📡 Start a Live Show</p>
+              <p style={{ margin: '0 0 12px 0', fontSize: 11.5, color: theme.textLight }}>Go live on CareFind. A red LIVE indicator shows in everyone's stories row. Invite guests to co-host — they'll get a notification.</p>
+              <input value={liveTitle} onChange={(e) => setLiveTitle(e.target.value)} placeholder="Show title (e.g. Malaria Awareness Live)" style={{ ...input, marginBottom: 12 }} />
+
+              <p style={{ margin: '0 0 6px 0', fontSize: 12, fontWeight: 700, color: theme.navy }}>Invite guests to co-host ({liveGuests.length} selected)</p>
+              <input value={guestSearch} onChange={(e) => setGuestSearch(e.target.value)} placeholder="Search users by name…" style={{ ...input, marginBottom: 8 }} />
+              <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 12 }}>
+                {users.filter(u => {
+                  const n = (u.full_name || u.display_name || '').toLowerCase()
+                  return guestSearch.trim() ? n.includes(guestSearch.toLowerCase()) : true
+                }).slice(0, 30).map(u => {
+                  const selected = liveGuests.some(g => g.id === u.id)
+                  return (
+                    <div key={u.id} onClick={() => toggleGuest(u)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, marginBottom: 4, cursor: 'pointer', background: selected ? '#ecfdf5' : theme.bg, border: `1px solid ${selected ? theme.tealDeep : 'transparent'}` }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 12 }}>
+                        {(u.full_name?.[0] || u.display_name?.[0] || '?').toUpperCase()}
+                      </div>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: theme.navy }}>{u.full_name || u.display_name || 'User'}</span>
+                      {selected && <span style={{ fontSize: 12, fontWeight: 800, color: theme.tealDeep }}>✓</span>}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <button onClick={startLiveShow} disabled={creatingShow} style={{ width: '100%', padding: 13, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14 }}>
+                {creatingShow ? 'Starting…' : '📡 Go Live Now'}
+              </button>
+            </div>
           </div>
         )}
 
