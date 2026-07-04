@@ -6,6 +6,7 @@ import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 import ArticleEditor from './ArticleEditor.jsx'
 import GiftPanel from './GiftPanel.jsx'
+import SupportPrompt from './SupportPrompt.jsx'
 
 function NewsArticle() {
   const { id } = useParams()
@@ -279,6 +280,8 @@ function NewsArticle() {
       {gifting && (
         <GiftPanel postId={article.id} recipientId={article.author_id} onClose={() => setGifting(false)} />
       )}
+
+      {article.author_id && <SupportPrompt onGift={() => user ? setGifting(true) : (window.location.href = '/login')} creatorName="this article" />}
 
       {/* More news */}
       {more.length > 0 && (
