@@ -140,7 +140,7 @@ function LiveShow() {
             </div>
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 4px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>
-                {it.profiles?.full_name || it.profiles?.display_name || 'Host'}
+                {it.profiles?.full_name || it.profiles?.display_name || 'CareFind'}
                 <span style={{ color: theme.textLight, fontWeight: 500, marginLeft: 6 }}>{timeAgo(it.created_at)}</span>
               </p>
               <div style={{ background: theme.bg, borderRadius: 14, padding: it.kind === 'image' ? 4 : '10px 14px', display: 'inline-block', maxWidth: '100%' }}>
