@@ -19,11 +19,13 @@ function VoiceRecorder({ showId, onRecorded, disabled }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       // Pick a mime type the browser supports
-      let mime = 'audio/webm'
-      if (!MediaRecorder.isTypeSupported(mime)) {
-        mime = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
-      }
-      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
+      // iOS Safari plays mp4/m4a reliably but struggles with webm — so PREFER mp4.
+      let mime = ''
+      if (MediaRecorder.isTypeSupported('audio/mp4')) mime = 'audio/mp4'
+      else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm'
+      // Lower bitrate = smaller file = faster upload on weak networks
+      const opts = mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 }
+      const mr = new MediaRecorder(stream, opts)
       mediaRef.current = mr
       chunksRef.current = []
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
@@ -99,7 +101,7 @@ function VoiceRecorder({ showId, onRecorded, disabled }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <audio controls src={previewUrl} style={{ height: 36, maxWidth: 180 }} />
           <button onClick={sendVoice} disabled={uploading} type="button" style={{ padding: '7px 14px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, fontSize: 12 }}>
-            {uploading ? 'Sending…' : '📡 Post voice'}
+            {uploading ? 'Uploading… please wait' : '📡 Post voice'}
           </button>
           <button onClick={discard} type="button" style={{ padding: '7px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 16, fontWeight: 700, fontSize: 12 }}>
             Discard
