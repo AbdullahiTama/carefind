@@ -8,6 +8,7 @@ import { wrapBold, wrapItalic, wrapHighlight, renderArticleHtml } from './lib/ar
 import GiftPanel from './GiftPanel.jsx'
 import VisualCard from './VisualCard.jsx'
 import ArticleEditor from './ArticleEditor.jsx'
+import GoLive from './GoLive.jsx'
 import Stories from './Stories.jsx'
 import { useRef } from 'react'
 
@@ -49,6 +50,9 @@ function Feed() {
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [commentCounts, setCommentCounts] = useState({})
   const [latestNews, setLatestNews] = useState([])
+  const [unreadNotifs, setUnreadNotifs] = useState(0)
+  const [showGoLive, setShowGoLive] = useState(false)
+  const [liveSessions, setLiveSessions] = useState([])
 
   const themeLabels = {
     'teal-depth': '🌊 Ocean',
@@ -211,7 +215,19 @@ function Feed() {
     loadFeed()
     checkProfileComplete()
     loadLatestNews()
+    loadUnreadNotifs()
+    loadLiveSessions()
   }, [user])
+
+  async function loadLiveSessions() {
+    const { data } = await supabase
+      .from('live_sessions')
+      .select('*, profiles(full_name, display_name, specialty)')
+      .eq('status', 'live')
+      .order('started_at', { ascending: false })
+      .limit(5)
+    setLiveSessions(data || [])
+  }
 
   async function loadLatestNews() {
     const { data } = await supabase
@@ -221,6 +237,16 @@ function Feed() {
       .order('published_at', { ascending: false })
       .limit(6)
     setLatestNews(data || [])
+  }
+
+  async function loadUnreadNotifs() {
+    if (!user) { setUnreadNotifs(0); return }
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', user.id)
+      .eq('read', false)
+    setUnreadNotifs(count || 0)
   }
 
 
@@ -498,7 +524,23 @@ function Feed() {
           <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.02em' }}>
             CareFind<span style={{ color: theme.tealBright }}>.</span>
           </span>
-          <Link to={user ? '/profile' : '/login'}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {user && (
+              <button onClick={() => setShowGoLive(true)} style={{ padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
+                🔴 Go Live
+              </button>
+            )}
+            <Link to="/notifications" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ fontSize: 22 }}>🔔</span>
+              {unreadNotifs > 0 && (
+                <span style={{
+                  position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16, padding: '0 4px',
+                  borderRadius: 8, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 900,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
+                }}>{unreadNotifs > 99 ? '99+' : unreadNotifs}</span>
+              )}
+            </Link>
+            <Link to={user ? '/profile' : '/login'}>
             <div style={{
               width: 34, height: 34, borderRadius: '50%', background: theme.tealBright,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -507,6 +549,7 @@ function Feed() {
               {user ? (user.email ? user.email[0].toUpperCase() : '?') : '?'}
             </div>
           </Link>
+          </div>
         </div>
         <h1 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
           Your CareFind feed
@@ -577,6 +620,26 @@ function Feed() {
             </button>
           </div>
         </Link>
+      )}
+
+      {liveSessions.length > 0 && (
+        <div style={{ padding: '10px 16px 0' }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px 0' }}>🔴 Live Now</p>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+            {liveSessions.map(s => (
+              <a key={s.id} href={`/live/${s.id}`} style={{ textDecoration: 'none', flexShrink: 0, width: 140 }}>
+                <div style={{ border: '2px solid #dc2626', borderRadius: 14, padding: 10, background: '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626' }} />
+                    <span style={{ fontSize: 9, fontWeight: 800, color: '#dc2626' }}>LIVE</span>
+                  </div>
+                  <p style={{ margin: '0 0 3px', fontSize: 12, fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>{s.topic?.slice(0, 40)}</p>
+                  <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>{s.profiles?.full_name || s.profiles?.display_name}</p>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
       )}
 
       {user ? (
@@ -1129,6 +1192,7 @@ function Feed() {
           </div>
         ))}
       </div>
+      {showGoLive && <GoLive onClose={() => setShowGoLive(false)} />}
       <BottomNav />
       {giftingPost && (
         <GiftPanel
