@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
 import VoiceRecorder from './VoiceRecorder.jsx'
+import SlideUploader from './SlideUploader.jsx'
 
 function hashPassword(p) { return `cf_hashed_${p}` }
 
@@ -299,6 +300,11 @@ export default function AdminPanel() {
 
   async function postLiveVoice(showId, url) {
     await supabase.from('live_items').insert({ show_id: showId, sender_id: null, kind: 'voice', content: url })
+    loadLiveControl(showId)
+  }
+
+  async function postLiveSlide(showId, url, num, total) {
+    await supabase.from('live_items').insert({ show_id: showId, sender_id: null, kind: 'slide', content: `${url}|||${num}|||${total}` })
     loadLiveControl(showId)
   }
 
@@ -1631,6 +1637,7 @@ export default function AdminPanel() {
 
                     <textarea value={liveDraft} onChange={(e) => setLiveDraft(e.target.value)} placeholder="Type something to broadcast live…" rows={2} style={{ ...input, resize: 'none', fontFamily: 'inherit', marginBottom: 6 }} />
                     <VoiceRecorder showId={s.id} onRecorded={(url) => postLiveVoice(s.id, url)} />
+                    <SlideUploader showId={s.id} onPostSlide={(url, num, total) => postLiveSlide(s.id, url, num, total)} />
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
                       <label style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', flex: 1 }}>
                         📷 {liveImage ? liveImage.name.slice(0, 16) : 'Add image'}
@@ -1650,6 +1657,7 @@ export default function AdminPanel() {
                             {it.kind === 'text' && <p style={{ margin: 0, fontSize: 12.5, color: theme.textDark }}>{it.content}</p>}
                             {it.kind === 'image' && <img src={it.content} alt="" style={{ maxWidth: 120, borderRadius: 6, display: 'block' }} />}
                             {it.kind === 'voice' && <audio controls src={it.content} style={{ height: 32, maxWidth: 180 }} />}
+                            {it.kind === 'slide' && <div><span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep }}>📑 Slide {(it.content||'').split('|||')[1]}</span><img src={(it.content||'').split('|||')[0]} alt="slide" style={{ maxWidth: 120, borderRadius: 6, display: 'block', marginTop: 2 }} /></div>}
                           </div>
                         ))}
                       </div>
