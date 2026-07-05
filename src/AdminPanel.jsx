@@ -97,6 +97,9 @@ export default function AdminPanel() {
   const [savingPromo, setSavingPromo] = useState(false)
   const [searchLogs, setSearchLogs] = useState([])
   const [liveTitle, setLiveTitle] = useState('')
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [trailerFile, setTrailerFile] = useState(null)
+  const [scheduledShows, setScheduledShows] = useState([])
   const [liveGuests, setLiveGuests] = useState([])
   const [activeShows, setActiveShows] = useState([])
   const [creatingShow, setCreatingShow] = useState(false)
@@ -225,6 +228,62 @@ export default function AdminPanel() {
       .eq('status', 'live')
       .order('started_at', { ascending: false })
     setActiveShows(data || [])
+    const { data: sched } = await supabase
+      .from('live_shows')
+      .select('id, title, status, scheduled_at, trailer_url, host_id')
+      .eq('status', 'scheduled')
+      .order('scheduled_at', { ascending: true })
+    setScheduledShows(sched || [])
+  }
+
+  async function scheduleShow() {
+    if (!liveTitle.trim()) { alert('Add a show title'); return }
+    if (!scheduledAt) { alert('Pick a date & time for the show'); return }
+    setCreatingShow(true)
+    let trailerUrl = null
+    if (trailerFile) {
+      const ext = trailerFile.name.split('.').pop() || 'mp4'
+      const path = `trailer-${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('live-media').upload(path, trailerFile, { contentType: trailerFile.type || 'video/mp4' })
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('live-media').getPublicUrl(path)
+        trailerUrl = urlData.publicUrl
+      }
+    }
+    const { data: show, error } = await supabase.from('live_shows').insert({
+      title: liveTitle.trim(),
+      status: 'scheduled',
+      host_id: null,
+      is_platform: true,
+      scheduled_at: new Date(scheduledAt).toISOString(),
+      trailer_url: trailerUrl,
+    }).select().maybeSingle()
+    if (error || !show) { alert('Could not schedule: ' + (error?.message || 'unknown')); setCreatingShow(false); return }
+    // Invite guests as participants + notify
+    for (const g of liveGuests) {
+      await supabase.from('live_participants').insert({ show_id: show.id, user_id: g.id, role: 'guest' })
+      await supabase.from('notifications').insert({
+        recipient_id: g.id, type: 'live_invite',
+        message: `invited you to co-host an upcoming live: "${liveTitle.trim()}"`,
+        link: `/live-dashboard/${show.id}`,
+      })
+    }
+    setLiveTitle(''); setScheduledAt(''); setTrailerFile(null); setLiveGuests([]); setGuestSearch('')
+    setCreatingShow(false)
+    loadActiveShows()
+    alert('Show scheduled! It will show a countdown to your audience. Tap "Start Now" when you\'re ready to go live.')
+  }
+
+  async function startScheduledShow(showId) {
+    await supabase.from('live_shows').update({ status: 'live', started_at: new Date().toISOString() }).eq('id', showId)
+    loadActiveShows()
+    alert('You are now LIVE!')
+  }
+
+  async function cancelScheduledShow(showId) {
+    if (!window.confirm('Cancel this scheduled show?')) return
+    await supabase.from('live_shows').update({ status: 'ended' }).eq('id', showId)
+    loadActiveShows()
   }
 
   function toggleGuest(u) {
@@ -1692,7 +1751,25 @@ export default function AdminPanel() {
               </div>
             )}
 
-            {/* Start a new show */}
+            {/* Scheduled / upcoming shows */}
+            {scheduledShows.length > 0 && (
+              <div style={card}>
+                <p style={{ margin: '0 0 10px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>📅 Scheduled Shows</p>
+                {scheduledShows.map(s => (
+                  <div key={s.id} style={{ padding: '10px 0', borderBottom: `1px solid ${theme.border}` }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: theme.navy }}>{s.title}</p>
+                    <p style={{ margin: '0 0 8px 0', fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>🕐 {new Date(s.scheduled_at).toLocaleString()}</p>
+                    {s.trailer_url && <video src={s.trailer_url} controls playsInline style={{ maxWidth: 160, borderRadius: 8, display: 'block', marginBottom: 8 }} />}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => startScheduledShow(s.id)} style={{ fontSize: 12, fontWeight: 800, color: '#fff', background: '#dc2626', border: 'none', padding: '8px 14px', borderRadius: 16 }}>📡 Start Now</button>
+                      <a href={`/live-show/${s.id}`} style={{ fontSize: 12, fontWeight: 700, color: theme.tealDeep, background: '#ecfdf5', padding: '8px 12px', borderRadius: 16, textDecoration: 'none' }}>👁 Preview</a>
+                      <button onClick={() => cancelScheduledShow(s.id)} style={{ fontSize: 12, fontWeight: 700, color: theme.alert, background: '#fef2f2', border: 'none', padding: '8px 12px', borderRadius: 16 }}>Cancel</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={card}>
               <p style={{ margin: '0 0 6px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>📡 Start a Live Show</p>
               <p style={{ margin: '0 0 12px 0', fontSize: 11.5, color: theme.textLight }}>Go live on CareFind. A red LIVE indicator shows in everyone's stories row. Invite guests to co-host — they'll get a notification.</p>
@@ -1718,9 +1795,23 @@ export default function AdminPanel() {
                 })}
               </div>
 
-              <button onClick={startLiveShow} disabled={creatingShow} style={{ width: '100%', padding: 13, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14 }}>
+              <button onClick={startLiveShow} disabled={creatingShow} style={{ width: '100%', padding: 13, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, marginBottom: 14 }}>
                 {creatingShow ? 'Starting…' : '📡 Go Live Now'}
               </button>
+
+              {/* Schedule for later */}
+              <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 14 }}>
+                <p style={{ margin: '0 0 6px 0', fontSize: 13, fontWeight: 800, color: theme.navy }}>📅 Or schedule for later</p>
+                <p style={{ margin: '0 0 8px 0', fontSize: 11, color: theme.textLight }}>Set a time and an optional trailer. A countdown shows in the stories row so your audience knows a live is coming.</p>
+                <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} style={{ ...input, marginBottom: 8 }} />
+                <label style={{ display: 'block', fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+                  🎬 {trailerFile ? trailerFile.name.slice(0, 24) : 'Add trailer video (optional)'}
+                  <input type="file" accept="video/*" onChange={(e) => setTrailerFile(e.target.files[0] || null)} style={{ display: 'none' }} />
+                </label>
+                <button onClick={scheduleShow} disabled={creatingShow} style={{ width: '100%', padding: 12, background: theme.navy, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
+                  {creatingShow ? 'Scheduling…' : '📅 Schedule Show'}
+                </button>
+              </div>
             </div>
           </div>
         )}
