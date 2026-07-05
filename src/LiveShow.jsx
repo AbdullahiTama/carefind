@@ -19,6 +19,7 @@ function LiveShow() {
   const [shareCount, setShareCount] = useState(0)
   const [giftTotal, setGiftTotal] = useState(0)
   const [topGifters, setTopGifters] = useState([])
+  const [activity, setActivity] = useState([])
   const [hearts, setHearts] = useState([])
   const [gifting, setGifting] = useState(false)
   const [reposted, setReposted] = useState(false)
@@ -46,16 +47,17 @@ function LiveShow() {
   }, [id])
 
   async function loadStats() {
-    const [likeRes, shareRes, giftRes] = await Promise.all([
+    const [likeRes, shareRes, giftRes, recentLikes] = await Promise.all([
       supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id),
       supabase.from('live_shares').select('id', { count: 'exact', head: true }).eq('show_id', id),
       supabase.from('live_gifts').select('amount, sender_id, profiles(full_name, display_name)').eq('show_id', id),
+      supabase.from('live_reactions').select('created_at, profiles(full_name, display_name)').eq('show_id', id).order('created_at', { ascending: false }).limit(8),
     ])
-    setLikeCount(likeRes.count || 0)
-    setShareCount(shareRes.count || 0)
+    // Counts only ever go UP (never flicker down)
+    setLikeCount(c => Math.max(c, likeRes.count || 0))
+    setShareCount(c => Math.max(c, shareRes.count || 0))
     const gifts = giftRes.data || []
     setGiftTotal(gifts.reduce((sum, g) => sum + (g.amount || 0), 0))
-    // Top gifters: sum by sender
     const byUser = {}
     gifts.forEach(g => {
       if (!g.sender_id) return
@@ -64,6 +66,16 @@ function LiveShow() {
       byUser[g.sender_id].total += (g.amount || 0)
     })
     setTopGifters(Object.values(byUser).sort((a, b) => b.total - a.total).slice(0, 3))
+    // Live activity feed: recent likers + gifters
+    const acts = []
+    ;(recentLikes.data || []).forEach(r => {
+      acts.push({ type: 'like', name: r.profiles?.full_name || r.profiles?.display_name || 'Someone', at: r.created_at })
+    })
+    gifts.slice(-5).forEach(g => {
+      acts.push({ type: 'gift', name: g.profiles?.full_name || g.profiles?.display_name || 'Someone', at: g.created_at, amount: g.amount })
+    })
+    acts.sort((a, b) => new Date(b.at) - new Date(a.at))
+    setActivity(acts.slice(0, 6))
   }
 
   async function loadLikes() { loadStats() }
@@ -71,16 +83,15 @@ function LiveShow() {
   function spawnHeart(xPercent) {
     const baseLeft = xPercent != null ? xPercent : (20 + Math.random() * 55)
     const emojis = ['❤️', '💚', '💛', '🧡', '💜', '💖', '💗']
-    // Burst: spawn 3-5 hearts per tap, varied size/position/drift
     const burst = 3 + Math.floor(Math.random() * 3)
     for (let k = 0; k < burst; k++) {
       const hid = heartId.current++
       const left = Math.max(5, Math.min(90, baseLeft + (Math.random() * 40 - 20)))
       const emoji = emojis[Math.floor(Math.random() * emojis.length)]
-      const size = 28 + Math.floor(Math.random() * 34)   // 28–62px, much bigger
-      const drift = Math.floor(Math.random() * 80 - 40)  // horizontal drift
-      const dur = 2.2 + Math.random() * 1.3              // varied speed
-      const delay = k * 60                                // slight stagger
+      const size = 28 + Math.floor(Math.random() * 34)
+      const drift = Math.floor(Math.random() * 80 - 40)
+      const dur = 2.2 + Math.random() * 1.3
+      const delay = k * 60
       setTimeout(() => {
         setHearts(prev => [...prev, { id: hid, left, emoji, size, drift, dur }])
         setTimeout(() => setHearts(prev => prev.filter(h => h.id !== hid)), dur * 1000)
@@ -91,10 +102,9 @@ function LiveShow() {
   async function tapLike() {
     spawnHeart()
     setLikeCount(c => c + 1)
-    await supabase.from('live_reactions').insert({ show_id: id, user_id: user?.id || null })
+    supabase.from('live_reactions').insert({ show_id: id, user_id: user?.id || null })
   }
 
-  // Tap anywhere on the show area to send a heart + like
   async function tapAnywhere(e) {
     const rect = e.currentTarget.getBoundingClientRect()
     const xPct = ((e.clientX - rect.left) / rect.width) * 100
@@ -106,8 +116,12 @@ function LiveShow() {
   async function shareLive() {
     setShareCount(c => c + 1)
     supabase.from('live_shares').insert({ show_id: id, user_id: user?.id || null })
+    const shareData = { title: show?.title || 'CareFind Live', text: 'Watch this live on CareFind', url: window.location.href }
     if (navigator.share) {
-      try { await navigator.share({ title: show?.title || 'CareFind Live', text: 'Watch this live on CareFind', url: window.location.href }) } catch (e) {}
+      try { await navigator.share(shareData) } catch (e) {}
+    } else {
+      // Fallback: copy link to clipboard
+      try { await navigator.clipboard.writeText(window.location.href); alert('Live link copied! Share it anywhere.') } catch (e) { alert(window.location.href) }
     }
   }
 
@@ -115,7 +129,9 @@ function LiveShow() {
     if (!user) { window.location.href = '/login'; return }
     if (reposted) return
     setReposted(true)
-    // Repost as a post on the user's profile linking to the live show
+    // Repost counts as a share too
+    setShareCount(c => c + 1)
+    supabase.from('live_shares').insert({ show_id: id, user_id: user.id })
     await supabase.from('posts').insert({
       user_id: user.id,
       content: `🔁 Reposted a live show: ${show?.title || 'CareFind Live'}\n${window.location.href}`,
@@ -220,7 +236,25 @@ function LiveShow() {
           Hosted by {hostName()}{show.host?.is_verified && ' ✓'}
           {show.guest && ` · with ${show.guest.full_name || show.guest.display_name}`}
         </p>
+        {isLive && (
+          <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 800 }}>❤️ {formatCount(likeCount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 800 }}>🔗 {formatCount(shareCount)}</span>
+            {giftTotal > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: '#fde68a' }}>🎁 {formatCount(giftTotal)}</span>}
+          </div>
+        )}
       </div>
+
+      {/* Live activity feed */}
+      {isLive && activity.length > 0 && (
+        <div style={{ padding: '8px 16px', background: '#ecfdf5', borderBottom: `1px solid ${theme.border}`, overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          {activity.map((a, i) => (
+            <span key={i} style={{ fontSize: 11.5, fontWeight: 600, color: theme.navy, marginRight: 14 }}>
+              {a.type === 'gift' ? '🎁' : '❤️'} <strong>{a.name}</strong> {a.type === 'gift' ? `gifted${a.amount ? ' ' + a.amount : ''}` : 'liked'}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Live items (the show content) */}
       <div onClick={isLive ? tapAnywhere : undefined} style={{ padding: '16px 16px 8px', cursor: isLive ? 'pointer' : 'default' }}>
@@ -294,16 +328,9 @@ function LiveShow() {
       {/* Live engagement bar */}
       {isLive && (
         <div style={{ borderTop: `1px solid ${theme.border}`, borderBottom: `8px solid ${theme.bg}` }}>
-          {/* Stats row */}
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', padding: '10px 8px 4px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: theme.textMid, fontWeight: 700 }}>❤️ {formatCount(likeCount)} likes</span>
-            <span style={{ fontSize: 12, color: theme.textMid, fontWeight: 700 }}>🔗 {formatCount(shareCount)} shares</span>
-            {giftTotal > 0 && <span style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 800 }}>🎁 {formatCount(giftTotal)} gifted</span>}
-          </div>
-
           {/* Top gifters */}
           {topGifters.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', padding: '0 8px 8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', padding: '8px 8px 4px', flexWrap: 'wrap' }}>
               {topGifters.map((g, i) => (
                 <span key={i} style={{ fontSize: 10.5, fontWeight: 700, color: theme.navy, background: '#fef9c3', padding: '2px 8px', borderRadius: 12 }}>
                   {['🥇', '🥈', '🥉'][i]} {g.name} · {formatCount(g.total)}
