@@ -178,7 +178,18 @@ function LiveShow() {
     await loadStats()
     setLoading(false)
     // Count a view each time someone opens the show
-    supabase.from('live_views').insert({ show_id: id, user_id: user?.id || null })
+    recordView()
+  }
+
+  async function recordView() {
+    const { error } = await supabase.from('live_views').insert({ show_id: id, user_id: user?.id || null })
+    if (error) {
+      console.log('view insert failed:', error.message)
+    } else {
+      // Optimistically bump the visible count so the creator sees it immediately
+      setViewCount(c => c + 1)
+      loadStats()
+    }
   }
 
   async function loadItems() {
