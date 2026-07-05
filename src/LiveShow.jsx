@@ -16,10 +16,21 @@ function LiveShow() {
   const [commentDraft, setCommentDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [likeCount, setLikeCount] = useState(0)
+  const [shareCount, setShareCount] = useState(0)
+  const [giftTotal, setGiftTotal] = useState(0)
+  const [topGifters, setTopGifters] = useState([])
   const [hearts, setHearts] = useState([])
   const [gifting, setGifting] = useState(false)
+  const [reposted, setReposted] = useState(false)
   const pollRef = useRef(null)
   const heartId = useRef(0)
+
+  function formatCount(n) {
+    n = n || 0
+    if (n < 1000) return `${n}`
+    if (n < 1000000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`.replace('.0k', 'k')
+    return `${(n / 1000000).toFixed(1)}M`.replace('.0M', 'M')
+  }
 
   const isHost = user && show && (user.id === show.host_id || user.id === show.guest_id)
 
@@ -29,19 +40,37 @@ function LiveShow() {
     pollRef.current = setInterval(() => {
       loadItems()
       loadComments()
-      loadLikes()
+      loadStats()
     }, 4000)
     return () => clearInterval(pollRef.current)
   }, [id])
 
-  async function loadLikes() {
-    const { count } = await supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id)
-    setLikeCount(count || 0)
+  async function loadStats() {
+    const [likeRes, shareRes, giftRes] = await Promise.all([
+      supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('live_shares').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('live_gifts').select('amount, sender_id, profiles(full_name, display_name)').eq('show_id', id),
+    ])
+    setLikeCount(likeRes.count || 0)
+    setShareCount(shareRes.count || 0)
+    const gifts = giftRes.data || []
+    setGiftTotal(gifts.reduce((sum, g) => sum + (g.amount || 0), 0))
+    // Top gifters: sum by sender
+    const byUser = {}
+    gifts.forEach(g => {
+      if (!g.sender_id) return
+      const name = g.profiles?.full_name || g.profiles?.display_name || 'Someone'
+      byUser[g.sender_id] = byUser[g.sender_id] || { name, total: 0 }
+      byUser[g.sender_id].total += (g.amount || 0)
+    })
+    setTopGifters(Object.values(byUser).sort((a, b) => b.total - a.total).slice(0, 3))
   }
 
-  function spawnHeart() {
+  async function loadLikes() { loadStats() }
+
+  function spawnHeart(xPercent) {
     const hid = heartId.current++
-    const left = 20 + Math.random() * 55 // random horizontal position
+    const left = xPercent != null ? xPercent : (20 + Math.random() * 55)
     const emoji = ['❤️', '💚', '💛', '🧡', '💜'][Math.floor(Math.random() * 5)]
     setHearts(prev => [...prev, { id: hid, left, emoji }])
     setTimeout(() => setHearts(prev => prev.filter(h => h.id !== hid)), 2500)
@@ -53,8 +82,33 @@ function LiveShow() {
     await supabase.from('live_reactions').insert({ show_id: id, user_id: user?.id || null })
   }
 
-  function shareLive() {
-    if (navigator.share) navigator.share({ title: show?.title || 'CareFind Live', text: 'Watch this live on CareFind', url: window.location.href })
+  // Tap anywhere on the show area to send a heart + like
+  async function tapAnywhere(e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100
+    spawnHeart(Math.max(10, Math.min(85, xPct)))
+    setLikeCount(c => c + 1)
+    supabase.from('live_reactions').insert({ show_id: id, user_id: user?.id || null })
+  }
+
+  async function shareLive() {
+    setShareCount(c => c + 1)
+    supabase.from('live_shares').insert({ show_id: id, user_id: user?.id || null })
+    if (navigator.share) {
+      try { await navigator.share({ title: show?.title || 'CareFind Live', text: 'Watch this live on CareFind', url: window.location.href }) } catch (e) {}
+    }
+  }
+
+  async function repostLive() {
+    if (!user) { window.location.href = '/login'; return }
+    if (reposted) return
+    setReposted(true)
+    // Repost as a post on the user's profile linking to the live show
+    await supabase.from('posts').insert({
+      user_id: user.id,
+      content: `🔁 Reposted a live show: ${show?.title || 'CareFind Live'}\n${window.location.href}`,
+      post_type: 'text',
+    })
   }
 
   async function loadShow() {
@@ -67,7 +121,7 @@ function LiveShow() {
     setShow(data || null)
     await loadItems()
     await loadComments()
-    await loadLikes()
+    await loadStats()
     setLoading(false)
   }
 
@@ -157,7 +211,7 @@ function LiveShow() {
       </div>
 
       {/* Live items (the show content) */}
-      <div style={{ padding: '16px 16px 8px' }}>
+      <div onClick={isLive ? tapAnywhere : undefined} style={{ padding: '16px 16px 8px', cursor: isLive ? 'pointer' : 'default' }}>
         {items.length === 0 && (
           <div style={{ textAlign: 'center', padding: '30px 20px', color: theme.textLight }}>
             <div style={{ fontSize: 30, marginBottom: 8 }}>📡</div>
@@ -221,25 +275,45 @@ function LiveShow() {
 
       {/* Live engagement bar */}
       {isLive && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '10px 8px', borderTop: `1px solid ${theme.border}`, borderBottom: `8px solid ${theme.bg}` }}>
-          <button onClick={tapLike} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>❤️</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>{likeCount > 0 ? likeCount : 'Like'}</span>
-          </button>
-          {show.host_id && (
+        <div style={{ borderTop: `1px solid ${theme.border}`, borderBottom: `8px solid ${theme.bg}` }}>
+          {/* Stats row */}
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', padding: '10px 8px 4px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: theme.textMid, fontWeight: 700 }}>❤️ {formatCount(likeCount)} likes</span>
+            <span style={{ fontSize: 12, color: theme.textMid, fontWeight: 700 }}>🔗 {formatCount(shareCount)} shares</span>
+            {giftTotal > 0 && <span style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 800 }}>🎁 {formatCount(giftTotal)} gifted</span>}
+          </div>
+
+          {/* Top gifters */}
+          {topGifters.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', padding: '0 8px 8px', flexWrap: 'wrap' }}>
+              {topGifters.map((g, i) => (
+                <span key={i} style={{ fontSize: 10.5, fontWeight: 700, color: theme.navy, background: '#fef9c3', padding: '2px 8px', borderRadius: 12 }}>
+                  {['🥇', '🥈', '🥉'][i]} {g.name} · {formatCount(g.total)}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '4px 8px 10px' }}>
+            <button onClick={tapLike} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+              <span style={{ fontSize: 22 }}>❤️</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Like</span>
+            </button>
             <button onClick={() => user ? setGifting(true) : (window.location.href = '/login')} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
               <span style={{ fontSize: 22 }}>🎁</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Gift</span>
             </button>
-          )}
-          <button onClick={shareLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>🔗</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Share</span>
-          </button>
-          <button onClick={shareLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>🔁</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Repost</span>
-          </button>
+            <button onClick={shareLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+              <span style={{ fontSize: 22 }}>🔗</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Share</span>
+            </button>
+            <button onClick={repostLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+              <span style={{ fontSize: 22 }}>🔁</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: reposted ? theme.tealDeep : theme.textMid }}>{reposted ? 'Reposted' : 'Repost'}</span>
+            </button>
+          </div>
+          <p style={{ margin: 0, textAlign: 'center', fontSize: 10, color: theme.textLight, paddingBottom: 8 }}>💡 Tap anywhere on the show above to send hearts</p>
         </div>
       )}
 
@@ -286,7 +360,7 @@ function LiveShow() {
       {show.host_id && <SupportPrompt onGift={() => user ? setGifting(true) : (window.location.href = '/login')} creatorName={hostName()} />}
 
       {gifting && (
-        <GiftPanel postId={show.id} recipientId={show.host_id} onClose={() => setGifting(false)} />
+        <GiftPanel postId={show.id} recipientId={show.host_id} onClose={() => { setGifting(false); loadStats() }} />
       )}
 
       <BottomNav />
