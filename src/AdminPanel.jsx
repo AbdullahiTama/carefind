@@ -105,6 +105,7 @@ export default function AdminPanel() {
   const [creatingShow, setCreatingShow] = useState(false)
   const [guestSearch, setGuestSearch] = useState('')
   const [liveItems, setLiveItems] = useState([])
+  const [liveStats, setLiveStats] = useState({ likes: 0, views: 0, shares: 0, gifts: 0 })
   const [liveComments, setLiveComments] = useState([])
   const [liveDraft, setLiveDraft] = useState('')
   const [liveImage, setLiveImage] = useState(null)
@@ -325,12 +326,22 @@ export default function AdminPanel() {
   }
 
   async function loadLiveControl(showId) {
-    const [itemsRes, commentsRes] = await Promise.all([
-      supabase.from('live_items').select('id, kind, content, created_at').eq('show_id', showId).order('created_at', { ascending: true }),
+    const [itemsRes, commentsRes, likeRes, shareRes, viewRes, giftRes] = await Promise.all([
+      supabase.from('live_items').select('id, kind, content, created_at').eq('show_id', showId).order('created_at', { ascending: false }),
       supabase.from('live_comments').select('id, content, hidden, created_at, profiles(full_name, display_name)').eq('show_id', showId).order('created_at', { ascending: false }).limit(60),
+      supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', showId),
+      supabase.from('live_shares').select('id', { count: 'exact', head: true }).eq('show_id', showId),
+      supabase.from('live_views').select('id', { count: 'exact', head: true }).eq('show_id', showId),
+      supabase.from('gifts').select('coins').eq('post_id', showId),
     ])
     setLiveItems(itemsRes.data || [])
     setLiveComments(commentsRes.data || [])
+    setLiveStats({
+      likes: likeRes.count || 0,
+      shares: shareRes.count || 0,
+      views: viewRes.count || 0,
+      gifts: (giftRes.data || []).reduce((s, g) => s + (g.coins || 0), 0),
+    })
   }
 
   async function postLiveItem(showId) {
@@ -1700,6 +1711,14 @@ export default function AdminPanel() {
                     <button onClick={() => loadLiveControl(s.id)} style={{ width: '100%', padding: 8, background: theme.bg, color: theme.navy, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, marginBottom: 8 }}>
                       🎛 Load Control Room
                     </button>
+
+                    {/* Live engagement stats (host sees their numbers) */}
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '8px 0', marginBottom: 8, background: theme.navy, borderRadius: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>❤️ {liveStats.likes}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>👁 {liveStats.views}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>🔗 {liveStats.shares}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#fde68a' }}>🎁 {liveStats.gifts}</span>
+                    </div>
 
                     <textarea value={liveDraft} onChange={(e) => setLiveDraft(e.target.value)} placeholder="Type something to broadcast live…" rows={2} style={{ ...input, resize: 'none', fontFamily: 'inherit', marginBottom: 6 }} />
                     <VoiceRecorder showId={s.id} onRecorded={(url) => postLiveVoice(s.id, url)} />
