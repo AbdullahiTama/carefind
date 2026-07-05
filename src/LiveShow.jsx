@@ -269,7 +269,7 @@ function LiveShow() {
             <button onClick={() => openWho('likes')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>❤️ {formatCount(likeCount)}</button>
             <button onClick={() => openWho('views')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>👁 {formatCount(viewCount)}</button>
             <button onClick={() => openWho('shares')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🔗 {formatCount(shareCount)}</button>
-            {giftTotal > 0 && <button onClick={() => openWho('gifts')} style={{ background: 'none', border: 'none', color: '#fde68a', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🎁 {formatCount(giftTotal)}</button>}
+            <button onClick={() => openWho('gifts')} style={{ background: 'none', border: 'none', color: '#fde68a', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🎁 {formatCount(giftTotal)}</button>
           </div>
         )}
       </div>
