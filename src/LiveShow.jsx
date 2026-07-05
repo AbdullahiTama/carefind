@@ -20,6 +20,9 @@ function LiveShow() {
   const [giftTotal, setGiftTotal] = useState(0)
   const [topGifters, setTopGifters] = useState([])
   const [activity, setActivity] = useState([])
+  const [viewCount, setViewCount] = useState(0)
+  const [whoOpen, setWhoOpen] = useState(null) // 'likes' | 'gifts' | 'shares' | 'views' | null
+  const [whoList, setWhoList] = useState([])
   const [hearts, setHearts] = useState([])
   const [gifting, setGifting] = useState(false)
   const [reposted, setReposted] = useState(false)
@@ -47,23 +50,25 @@ function LiveShow() {
   }, [id])
 
   async function loadStats() {
-    const [likeRes, shareRes, giftRes, recentLikes] = await Promise.all([
+    const [likeRes, shareRes, giftRes, recentLikes, viewRes] = await Promise.all([
       supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id),
       supabase.from('live_shares').select('id', { count: 'exact', head: true }).eq('show_id', id),
-      supabase.from('live_gifts').select('amount, sender_id, profiles(full_name, display_name)').eq('show_id', id),
+      supabase.from('gifts').select('coins, sender_id, created_at, profiles:sender_id(full_name, display_name)').eq('post_id', id),
       supabase.from('live_reactions').select('created_at, profiles(full_name, display_name)').eq('show_id', id).order('created_at', { ascending: false }).limit(8),
+      supabase.from('live_views').select('id', { count: 'exact', head: true }).eq('show_id', id),
     ])
     // Counts only ever go UP (never flicker down)
     setLikeCount(c => Math.max(c, likeRes.count || 0))
     setShareCount(c => Math.max(c, shareRes.count || 0))
+    setViewCount(c => Math.max(c, viewRes.count || 0))
     const gifts = giftRes.data || []
-    setGiftTotal(gifts.reduce((sum, g) => sum + (g.amount || 0), 0))
+    setGiftTotal(gifts.reduce((sum, g) => sum + (g.coins || 0), 0))
     const byUser = {}
     gifts.forEach(g => {
       if (!g.sender_id) return
       const name = g.profiles?.full_name || g.profiles?.display_name || 'Someone'
       byUser[g.sender_id] = byUser[g.sender_id] || { name, total: 0 }
-      byUser[g.sender_id].total += (g.amount || 0)
+      byUser[g.sender_id].total += (g.coins || 0)
     })
     setTopGifters(Object.values(byUser).sort((a, b) => b.total - a.total).slice(0, 3))
     // Live activity feed: recent likers + gifters
@@ -72,13 +77,34 @@ function LiveShow() {
       acts.push({ type: 'like', name: r.profiles?.full_name || r.profiles?.display_name || 'Someone', at: r.created_at })
     })
     gifts.slice(-5).forEach(g => {
-      acts.push({ type: 'gift', name: g.profiles?.full_name || g.profiles?.display_name || 'Someone', at: g.created_at, amount: g.amount })
+      acts.push({ type: 'gift', name: g.profiles?.full_name || g.profiles?.display_name || 'Someone', at: g.created_at, amount: g.coins })
     })
     acts.sort((a, b) => new Date(b.at) - new Date(a.at))
     setActivity(acts.slice(0, 6))
   }
 
   async function loadLikes() { loadStats() }
+
+  async function openWho(kind) {
+    setWhoOpen(kind)
+    setWhoList([])
+    let data = []
+    if (kind === 'likes') {
+      const r = await supabase.from('live_reactions').select('user_id, created_at, profiles(id, full_name, display_name, is_verified)').eq('show_id', id).order('created_at', { ascending: false }).limit(100)
+      data = (r.data || []).map(x => ({ ...x.profiles, when: x.created_at }))
+    } else if (kind === 'shares') {
+      const r = await supabase.from('live_shares').select('user_id, created_at, profiles(id, full_name, display_name, is_verified)').eq('show_id', id).order('created_at', { ascending: false }).limit(100)
+      data = (r.data || []).map(x => ({ ...x.profiles, when: x.created_at }))
+    } else if (kind === 'views') {
+      const r = await supabase.from('live_views').select('user_id, created_at, profiles(id, full_name, display_name, is_verified)').eq('show_id', id).order('created_at', { ascending: false }).limit(100)
+      data = (r.data || []).map(x => ({ ...x.profiles, when: x.created_at }))
+    } else if (kind === 'gifts') {
+      const r = await supabase.from('gifts').select('sender_id, coins, created_at, profiles:sender_id(id, full_name, display_name, is_verified)').eq('post_id', id).order('created_at', { ascending: false }).limit(100)
+      data = (r.data || []).map(x => ({ ...x.profiles, amount: x.coins, when: x.created_at }))
+    }
+    // Filter out null profiles (guests/anon), keep unique
+    setWhoList(data.filter(d => d && d.id))
+  }
 
   function spawnHeart(xPercent) {
     const baseLeft = xPercent != null ? xPercent : (20 + Math.random() * 55)
@@ -151,6 +177,8 @@ function LiveShow() {
     await loadComments()
     await loadStats()
     setLoading(false)
+    // Count a view each time someone opens the show
+    supabase.from('live_views').insert({ show_id: id, user_id: user?.id || null })
   }
 
   async function loadItems() {
@@ -237,10 +265,11 @@ function LiveShow() {
           {show.guest && ` · with ${show.guest.full_name || show.guest.display_name}`}
         </p>
         {isLive && (
-          <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 800 }}>❤️ {formatCount(likeCount)}</span>
-            <span style={{ fontSize: 13, fontWeight: 800 }}>🔗 {formatCount(shareCount)}</span>
-            {giftTotal > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: '#fde68a' }}>🎁 {formatCount(giftTotal)}</span>}
+          <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => openWho('likes')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>❤️ {formatCount(likeCount)}</button>
+            <button onClick={() => openWho('views')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>👁 {formatCount(viewCount)}</button>
+            <button onClick={() => openWho('shares')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🔗 {formatCount(shareCount)}</button>
+            {giftTotal > 0 && <button onClick={() => openWho('gifts')} style={{ background: 'none', border: 'none', color: '#fde68a', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🎁 {formatCount(giftTotal)}</button>}
           </div>
         )}
       </div>
@@ -345,10 +374,12 @@ function LiveShow() {
               <span style={{ fontSize: 22 }}>❤️</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Like</span>
             </button>
-            <button onClick={() => user ? setGifting(true) : (window.location.href = '/login')} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
-              <span style={{ fontSize: 22 }}>🎁</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Gift</span>
-            </button>
+            {(show.host_id || show.guest_id) && (
+              <button onClick={() => user ? setGifting(true) : (window.location.href = '/login')} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                <span style={{ fontSize: 22 }}>🎁</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Gift</span>
+              </button>
+            )}
             <button onClick={shareLive} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
               <span style={{ fontSize: 22 }}>🔗</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: theme.textMid }}>Share</span>
@@ -404,9 +435,36 @@ function LiveShow() {
 
       {show.host_id && <SupportPrompt onGift={() => user ? setGifting(true) : (window.location.href = '/login')} creatorName={hostName()} />}
 
-      {gifting && (
-        <GiftPanel postId={show.id} recipientId={show.host_id} onClose={() => { setGifting(false); loadStats() }} />
+      {/* Who liked/gifted/shared/viewed modal */}
+      {whoOpen && (
+        <div onClick={() => setWhoOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, maxHeight: '70vh', overflowY: 'auto', padding: 18, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: theme.navy, textTransform: 'capitalize' }}>
+                {whoOpen === 'likes' ? '❤️ Likes' : whoOpen === 'gifts' ? '🎁 Gifters' : whoOpen === 'shares' ? '🔗 Shares' : '👁 Viewers'}
+              </h3>
+              <button onClick={() => setWhoOpen(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: theme.textLight }}>✕</button>
+            </div>
+            {whoList.length === 0 && <p style={{ fontSize: 13, color: theme.textLight }}>No named {whoOpen} yet. (Guests who aren't logged in aren't listed.)</p>}
+            {whoList.map((p, i) => (
+              <Link key={i} to={`/u/${p.id}`} onClick={() => setWhoOpen(null)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${theme.border}`, textDecoration: 'none' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
+                  {(p.full_name?.[0] || p.display_name?.[0] || '?').toUpperCase()}
+                </div>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: theme.navy }}>
+                  {p.full_name || p.display_name || 'User'}{p.is_verified && <span style={{ color: theme.tealDeep, marginLeft: 3 }}>✓</span>}
+                </span>
+                {whoOpen === 'gifts' && p.amount != null && <span style={{ fontSize: 12, fontWeight: 800, color: theme.tealDeep }}>🎁 {p.amount}</span>}
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
+
+      {gifting && (
+        <GiftPanel postId={show.id} recipientId={show.host_id || show.guest_id} onClose={() => { setGifting(false); loadStats() }} />
+      )}
+      {/* Gift recipient note: host, or a co-host guest if platform-hosted */}
 
       <BottomNav />
     </div>
