@@ -15,6 +15,7 @@ function LiveDashboard() {
   const [show, setShow] = useState(null)
   const [participants, setParticipants] = useState([])
   const [items, setItems] = useState([])
+  const [stats, setStats] = useState({ likes: 0, views: 0, shares: 0, gifts: 0 })
   const [comments, setComments] = useState([])
   const [draft, setDraft] = useState('')
   const [image, setImage] = useState(null)
@@ -28,9 +29,31 @@ function LiveDashboard() {
   useEffect(() => {
     if (!user) { navigate('/login'); return }
     load()
-    pollRef.current = setInterval(() => { loadItems(); loadComments() }, 4000)
+    pollRef.current = setInterval(() => { loadItems(); loadComments(); loadStats() }, 4000)
     return () => clearInterval(pollRef.current)
   }, [id, user])
+
+  async function loadStats() {
+    const [likeRes, shareRes, viewRes, giftRes] = await Promise.all([
+      supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('live_shares').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('live_views').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('gifts').select('coins').eq('post_id', id),
+    ])
+    setStats(prev => ({
+      likes: Math.max(prev.likes, likeRes.count || 0),
+      shares: Math.max(prev.shares, shareRes.count || 0),
+      views: Math.max(prev.views, viewRes.count || 0),
+      gifts: Math.max(prev.gifts, (giftRes.data || []).reduce((s, g) => s + (g.coins || 0), 0)),
+    }))
+  }
+
+  function fmtCount(n) {
+    n = n || 0
+    if (n < 1000) return `${n}`
+    if (n < 1000000) return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`.replace('.0k', 'k')
+    return `${(n / 1000000).toFixed(1)}M`.replace('.0M', 'M')
+  }
 
   async function load() {
     setLoading(true)
@@ -47,6 +70,7 @@ function LiveDashboard() {
     }
     await loadItems()
     await loadComments()
+    await loadStats()
     setLoading(false)
   }
 
@@ -55,7 +79,7 @@ function LiveDashboard() {
       .from('live_items')
       .select('id, kind, content, created_at, sender_id, profiles(full_name, display_name)')
       .eq('show_id', id)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
     setItems(data || [])
   }
 
@@ -159,6 +183,12 @@ function LiveDashboard() {
           {participants.length} participant{participants.length !== 1 ? 's' : ''}
           {' · '}{participants.filter(p => p.joined).length} joined
         </p>
+        <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>❤️ {fmtCount(stats.likes)}</span>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>👁 {fmtCount(stats.views)}</span>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>🔗 {fmtCount(stats.shares)}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#fde68a' }}>🎁 {fmtCount(stats.gifts)}</span>
+        </div>
       </div>
 
       {!ended && (
