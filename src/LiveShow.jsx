@@ -69,11 +69,23 @@ function LiveShow() {
   async function loadLikes() { loadStats() }
 
   function spawnHeart(xPercent) {
-    const hid = heartId.current++
-    const left = xPercent != null ? xPercent : (20 + Math.random() * 55)
-    const emoji = ['❤️', '💚', '💛', '🧡', '💜'][Math.floor(Math.random() * 5)]
-    setHearts(prev => [...prev, { id: hid, left, emoji }])
-    setTimeout(() => setHearts(prev => prev.filter(h => h.id !== hid)), 2500)
+    const baseLeft = xPercent != null ? xPercent : (20 + Math.random() * 55)
+    const emojis = ['❤️', '💚', '💛', '🧡', '💜', '💖', '💗']
+    // Burst: spawn 3-5 hearts per tap, varied size/position/drift
+    const burst = 3 + Math.floor(Math.random() * 3)
+    for (let k = 0; k < burst; k++) {
+      const hid = heartId.current++
+      const left = Math.max(5, Math.min(90, baseLeft + (Math.random() * 40 - 20)))
+      const emoji = emojis[Math.floor(Math.random() * emojis.length)]
+      const size = 28 + Math.floor(Math.random() * 34)   // 28–62px, much bigger
+      const drift = Math.floor(Math.random() * 80 - 40)  // horizontal drift
+      const dur = 2.2 + Math.random() * 1.3              // varied speed
+      const delay = k * 60                                // slight stagger
+      setTimeout(() => {
+        setHearts(prev => [...prev, { id: hid, left, emoji, size, drift, dur }])
+        setTimeout(() => setHearts(prev => prev.filter(h => h.id !== hid)), dur * 1000)
+      }, delay)
+    }
   }
 
   async function tapLike() {
@@ -261,15 +273,21 @@ function LiveShow() {
 
       {/* Floating hearts overlay */}
       <style>{`
-        @keyframes floatUp {
-          0% { transform: translateY(0) scale(0.7); opacity: 0; }
-          15% { opacity: 1; transform: translateY(-10px) scale(1.1); }
-          100% { transform: translateY(-220px) scale(1); opacity: 0; }
+        @keyframes floatUpBig {
+          0% { transform: translateY(0) translateX(0) scale(0.4) rotate(0deg); opacity: 0; }
+          12% { opacity: 1; transform: translateY(-30px) scale(1.3) rotate(-8deg); }
+          50% { opacity: 1; }
+          100% { transform: translateY(-340px) translateX(var(--drift)) scale(1) rotate(12deg); opacity: 0; }
         }
       `}</style>
-      <div style={{ position: 'fixed', bottom: 130, left: 0, right: 0, maxWidth: 480, margin: '0 auto', height: 0, pointerEvents: 'none', zIndex: 500 }}>
+      <div style={{ position: 'fixed', bottom: 120, left: 0, right: 0, maxWidth: 480, margin: '0 auto', height: 0, pointerEvents: 'none', zIndex: 500 }}>
         {hearts.map(h => (
-          <span key={h.id} style={{ position: 'absolute', bottom: 0, left: `${h.left}%`, fontSize: 28, animation: 'floatUp 2.5s ease-out forwards' }}>{h.emoji}</span>
+          <span key={h.id} style={{
+            position: 'absolute', bottom: 0, left: `${h.left}%`, fontSize: h.size,
+            '--drift': `${h.drift}px`,
+            animation: `floatUpBig ${h.dur}s ease-out forwards`,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+          }}>{h.emoji}</span>
         ))}
       </div>
 
