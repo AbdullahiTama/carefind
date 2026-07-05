@@ -18,6 +18,7 @@ function Stories() {
   const [sImage, setSImage] = useState(null)
   const [posting, setPosting] = useState(false)
   const [liveShow, setLiveShow] = useState(null)
+  const [upcomingShow, setUpcomingShow] = useState(null)
   const timerRef = useRef(null)
 
   const STORY_DURATION = 6000
@@ -36,6 +37,14 @@ function Stories() {
       .order('started_at', { ascending: false })
       .limit(1)
     setLiveShow(data && data[0] ? data[0] : null)
+    // Also load the next upcoming scheduled show
+    const { data: up } = await supabase
+      .from('live_shows')
+      .select('id, title, scheduled_at')
+      .eq('status', 'scheduled')
+      .order('scheduled_at', { ascending: true })
+      .limit(1)
+    setUpcomingShow(up && up[0] ? up[0] : null)
   }
 
   async function checkCanPost() {
@@ -133,7 +142,18 @@ function Stories() {
   }
 
   const hasStories = stories.length > 0
-  if (!hasStories && !canPost && !liveShow) return null
+  if (!hasStories && !canPost && !liveShow && !upcomingShow) return null
+
+  function countdownLabel(dateStr) {
+    const diff = new Date(dateStr) - Date.now()
+    if (diff <= 0) return 'soon'
+    const d = Math.floor(diff / 86400000)
+    const h = Math.floor((diff % 86400000) / 3600000)
+    const m = Math.floor((diff % 3600000) / 60000)
+    if (d > 0) return `${d}d ${h}h`
+    if (h > 0) return `${h}h ${m}m`
+    return `${m}m`
+  }
 
   return (
     <>
@@ -151,6 +171,17 @@ function Stories() {
               <span style={{ position: 'absolute', bottom: -2, left: '50%', transform: 'translateX(-50%)', background: '#dc2626', color: '#fff', fontSize: 8, fontWeight: 900, padding: '1px 6px', borderRadius: 8, letterSpacing: '0.05em' }}>LIVE</span>
             </div>
             <span style={{ fontSize: 10.5, fontWeight: 800, color: '#dc2626', maxWidth: 68, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Live now</span>
+          </a>
+        )}
+
+        {/* UPCOMING scheduled show */}
+        {upcomingShow && (
+          <a href={`/live-show/${upcomingShow.id}`} style={{ flexShrink: 0, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, width: 70 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', padding: 3, background: theme.navy, position: 'relative' }}>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: theme.tealGradient, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 22, fontWeight: 900 }}>⏳</div>
+              <span style={{ position: 'absolute', bottom: -2, left: '50%', transform: 'translateX(-50%)', background: theme.navy, color: '#fff', fontSize: 8, fontWeight: 900, padding: '1px 5px', borderRadius: 8, whiteSpace: 'nowrap' }}>{countdownLabel(upcomingShow.scheduled_at)}</span>
+            </div>
+            <span style={{ fontSize: 10.5, fontWeight: 800, color: theme.navy, maxWidth: 68, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Upcoming</span>
           </a>
         )}
 
