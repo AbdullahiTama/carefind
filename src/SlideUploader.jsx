@@ -54,7 +54,7 @@ function SlideUploader({ showId, onPostSlide }) {
       setSlides(out)
       setProgress('')
     } catch (err) {
-      setError('Could not process that PDF. Try a smaller file.')
+      setError('Could not process that PDF: ' + (err?.message || 'unknown error') + '. Try a smaller/simpler PDF, or check your connection.')
     }
     setProcessing(false)
     if (fileRef.current) fileRef.current.value = ''
@@ -66,7 +66,7 @@ function SlideUploader({ showId, onPostSlide }) {
     const path = `slide-${showId}-${Date.now()}-${idx}.jpg`
     const { error: upErr } = await supabase.storage.from('live-media').upload(path, slide.blob, { contentType: 'image/jpeg' })
     if (upErr) {
-      setError('Upload failed. Check your connection.')
+      setError('Upload failed: ' + (upErr.message || 'check your connection'))
       setPostingIndex(null)
       return
     }
