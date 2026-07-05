@@ -16,6 +16,7 @@ function LiveShow() {
   const [commentDraft, setCommentDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [likeCount, setLikeCount] = useState(0)
+  const [statsLoaded, setStatsLoaded] = useState(false)
   const [shareCount, setShareCount] = useState(0)
   const [giftTotal, setGiftTotal] = useState(0)
   const [topGifters, setTopGifters] = useState([])
@@ -23,6 +24,12 @@ function LiveShow() {
   const [viewCount, setViewCount] = useState(0)
   const [whoOpen, setWhoOpen] = useState(null) // 'likes' | 'gifts' | 'shares' | 'views' | null
   const [whoList, setWhoList] = useState([])
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
   const [hearts, setHearts] = useState([])
   const [gifting, setGifting] = useState(false)
   const [reposted, setReposted] = useState(false)
@@ -81,6 +88,7 @@ function LiveShow() {
     })
     acts.sort((a, b) => new Date(b.at) - new Date(a.at))
     setActivity(acts.slice(0, 6))
+    setStatsLoaded(true)
   }
 
   async function loadLikes() { loadStats() }
@@ -197,7 +205,7 @@ function LiveShow() {
       .from('live_items')
       .select('id, kind, content, created_at, sender_id, profiles(full_name, display_name)')
       .eq('show_id', id)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
     setItems(data || [])
   }
 
@@ -255,6 +263,51 @@ function LiveShow() {
   const isLive = show.status === 'live'
   const visibleComments = comments.filter(c => !c.hidden || isHost)
 
+  // Scheduled/upcoming show — show countdown + trailer
+  if (show.status === 'scheduled') {
+    const target = show.scheduled_at ? new Date(show.scheduled_at) : null
+    const diff = target ? target - now : 0
+    const days = Math.max(0, Math.floor(diff / 86400000))
+    const hrs = Math.max(0, Math.floor((diff % 86400000) / 3600000))
+    const mins = Math.max(0, Math.floor((diff % 3600000) / 60000))
+    const secs = Math.max(0, Math.floor((diff % 60000) / 1000))
+    return (
+      <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90, background: theme.navy, minHeight: '100vh', color: '#fff' }}>
+        <div style={{ padding: '18px 16px' }}>
+          <Link to="/" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Feed</Link>
+        </div>
+        <div style={{ textAlign: 'center', padding: '20px 20px 30px' }}>
+          <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.15)', padding: '5px 16px', borderRadius: 20, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', marginBottom: 16 }}>⏳ UPCOMING LIVE</div>
+          <h1 style={{ fontSize: 26, fontWeight: 900, margin: '0 0 8px 0' }}>{show.title}</h1>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', margin: '0 0 24px 0' }}>
+            {target ? target.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+          </p>
+
+          {/* Countdown */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 28 }}>
+            {[['Days', days], ['Hrs', hrs], ['Min', mins], ['Sec', secs]].map(([label, val]) => (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: '14px 12px', minWidth: 62 }}>
+                <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1 }}>{String(val).padStart(2, '0')}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 4, fontWeight: 700 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Trailer */}
+          {show.trailer_url && (
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>🎬 WATCH THE TRAILER</p>
+              <video src={show.trailer_url} controls playsInline style={{ width: '100%', borderRadius: 14, display: 'block' }} />
+            </div>
+          )}
+
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Come back at showtime — a red LIVE badge will appear when we go live. 💚</p>
+        </div>
+        <BottomNav />
+      </div>
+    )
+  }
+
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90, background: '#fff' }}>
       {/* Header */}
@@ -277,10 +330,10 @@ function LiveShow() {
         </p>
         {isLive && (
           <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => openWho('likes')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>❤️ {formatCount(likeCount)}</button>
-            <button onClick={() => openWho('views')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>👁 {formatCount(viewCount)}</button>
-            <button onClick={() => openWho('shares')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🔗 {formatCount(shareCount)}</button>
-            <button onClick={() => openWho('gifts')} style={{ background: 'none', border: 'none', color: '#fde68a', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🎁 {formatCount(giftTotal)}</button>
+            <button onClick={() => openWho('likes')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>❤️ {statsLoaded ? formatCount(likeCount) : '·'}</button>
+            <button onClick={() => openWho('views')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>👁 {statsLoaded ? formatCount(viewCount) : '·'}</button>
+            <button onClick={() => openWho('shares')} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🔗 {statsLoaded ? formatCount(shareCount) : '·'}</button>
+            <button onClick={() => openWho('gifts')} style={{ background: 'none', border: 'none', color: '#fde68a', fontSize: 13, fontWeight: 800, padding: 0, cursor: 'pointer' }}>🎁 {statsLoaded ? formatCount(giftTotal) : '·'}</button>
           </div>
         )}
       </div>
