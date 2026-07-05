@@ -58,16 +58,20 @@ function LiveShow() {
 
   async function loadStats() {
     const [likeRes, shareRes, giftRes, recentLikes, viewRes] = await Promise.all([
-      supabase.from('live_reactions').select('id', { count: 'exact', head: true }).eq('show_id', id),
-      supabase.from('live_shares').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('live_reactions').select('id').eq('show_id', id),
+      supabase.from('live_shares').select('id').eq('show_id', id),
       supabase.from('gifts').select('coins, sender_id, created_at, profiles:sender_id(full_name, display_name)').eq('post_id', id),
       supabase.from('live_reactions').select('created_at, profiles(full_name, display_name)').eq('show_id', id).order('created_at', { ascending: false }).limit(8),
-      supabase.from('live_views').select('id', { count: 'exact', head: true }).eq('show_id', id),
+      supabase.from('live_views').select('id').eq('show_id', id),
     ])
-    // Counts only ever go UP (never flicker down)
-    setLikeCount(c => Math.max(c, likeRes.count || 0))
-    setShareCount(c => Math.max(c, shareRes.count || 0))
-    setViewCount(c => Math.max(c, viewRes.count || 0))
+    // Real row counts (array length is reliable; head:true count can return null right after login)
+    const likeN = (likeRes.data || []).length
+    const shareN = (shareRes.data || []).length
+    const viewN = (viewRes.data || []).length
+    // Only update if we actually got data (don't overwrite a good number with 0 on a failed read)
+    if (!likeRes.error) setLikeCount(c => Math.max(c, likeN))
+    if (!shareRes.error) setShareCount(c => Math.max(c, shareN))
+    if (!viewRes.error) setViewCount(c => Math.max(c, viewN))
     const gifts = giftRes.data || []
     setGiftTotal(gifts.reduce((sum, g) => sum + (g.coins || 0), 0))
     const byUser = {}
@@ -88,7 +92,7 @@ function LiveShow() {
     })
     acts.sort((a, b) => new Date(b.at) - new Date(a.at))
     setActivity(acts.slice(0, 6))
-    setStatsLoaded(true)
+    if (!likeRes.error) setStatsLoaded(true)
   }
 
   async function loadLikes() { loadStats() }
@@ -320,7 +324,7 @@ function LiveShow() {
               <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.05em' }}>LIVE</span>
             </div>
           ) : (
-            <span style={{ fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 20 }}>ENDED</span>
+            <span style={{ fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 20 }}>▶️ REPLAY</span>
           )}
         </div>
         <h1 style={{ fontSize: 20, fontWeight: 900, margin: '0 0 4px 0', lineHeight: 1.2 }}>{show.title || 'CareFind Live'}</h1>
