@@ -9,6 +9,7 @@ import GiftPanel from './GiftPanel.jsx'
 import VisualCard from './VisualCard.jsx'
 import ArticleEditor from './ArticleEditor.jsx'
 import GoLive from './GoLive.jsx'
+import UserGoLive from './UserGoLive.jsx'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
 import { useRef } from 'react'
@@ -48,6 +49,7 @@ function Feed() {
   const [reviewSearchResults, setReviewSearchResults] = useState([])
   const [reviewSearching, setReviewSearching] = useState(false)
   const [profileComplete, setProfileComplete] = useState(true)
+  const [canGoLive, setCanGoLive] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [commentCounts, setCommentCounts] = useState({})
   const [latestNews, setLatestNews] = useState([])
@@ -99,14 +101,16 @@ function Feed() {
   }
 
   async function checkProfileComplete() {
-    if (!user) { setProfileComplete(true); return }
+    if (!user) { setProfileComplete(true); setCanGoLive(false); return }
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, display_name, phone')
+      .select('full_name, display_name, phone, is_verified, verification_label')
       .eq('id', user.id)
       .maybeSingle()
     const complete = !!(data && data.full_name && data.display_name && data.phone)
     setProfileComplete(complete)
+    // Only verified businesses or professionals can go live
+    setCanGoLive(!!(data && data.is_verified))
   }
 
   async function loadFeed() {
@@ -526,7 +530,7 @@ function Feed() {
             CareFind<span style={{ color: theme.tealBright }}>.</span>
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {user && (
+            {user && canGoLive && (
               <button onClick={() => setShowGoLive(true)} style={{ padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
                 🔴 Go Live
               </button>
@@ -1193,7 +1197,7 @@ function Feed() {
           </div>
         ))}
       </div>
-      {showGoLive && <GoLive onClose={() => setShowGoLive(false)} />}
+      {showGoLive && <UserGoLive onClose={() => setShowGoLive(false)} />}
       <SupportPrompt creatorName="CareFind creators" />
       <BottomNav />
       {giftingPost && (
