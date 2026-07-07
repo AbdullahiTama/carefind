@@ -19,6 +19,9 @@ function PublicProfile() {
   const [userStories, setUserStories] = useState([])
   const [viewerIndex, setViewerIndex] = useState(null)
   const [progress, setProgress] = useState(0)
+  const [activeTab, setActiveTab] = useState('posts')
+  const [playlists, setPlaylists] = useState([])
+  const [openPost, setOpenPost] = useState(null)
   const timerRef = useRef(null)
   const STORY_DURATION = 6000
 
@@ -47,16 +50,18 @@ function PublicProfile() {
 
       setProfile(profileData)
 
-      const [postData, followerData, storyData] = await Promise.all([
-        supabase.from('posts').select('id, content, created_at, post_type, theme').eq('user_id', id).order('created_at', { ascending: false }).limit(10),
+      const [postData, followerData, storyData, playlistData] = await Promise.all([
+        supabase.from('posts').select('id, content, created_at, post_type, theme, image_url').eq('user_id', id).order('created_at', { ascending: false }).limit(60),
         supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', id),
         supabase.from('stories').select('id, title, body, image_url, bg_color, created_at').eq('user_id', id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }),
+        supabase.from('playlists').select('id, title, description, created_at').eq('owner_id', id).order('created_at', { ascending: false }),
       ])
 
       setPosts(postData.data || [])
       setFollowerCount(followerData.count || 0)
       setPostCount(postData.data?.length || 0)
       setUserStories(storyData.data || [])
+      setPlaylists(playlistData.data || [])
 
       if (user) {
         const { data: followData } = await supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
@@ -223,24 +228,78 @@ function PublicProfile() {
           </div>
         </div>
 
-        <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>Posts</p>
-        {posts.length === 0 && <p style={{ color: theme.textLight, fontSize: 13 }}>No posts yet.</p>}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {posts.map((post) => (
-            <div key={post.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: post.post_type === 'visual' ? 0 : 14, overflow: 'hidden', background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-              {post.post_type === 'visual' ? (
-                <div style={{ background: visualThemes[post.theme] || visualThemes.teal, padding: 22, minHeight: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>{post.content}</p>
-                </div>
-              ) : (
-                <p style={{ margin: '0 0 8px 0', whiteSpace: 'pre-wrap', fontSize: 13.5, color: theme.textMid }}>{post.content}</p>
-              )}
-              <p style={{ margin: post.post_type === 'visual' ? '8px 14px' : 0, color: theme.textLight, fontSize: 11.5 }}>{timeAgo(post.created_at)}</p>
-            </div>
+        {/* Content tabs */}
+        <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
+          {[['posts', '📝 Posts'], ['reposts', '🔁 Reposts'], ['playlists', '🎬 Playlists']].map(([key, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', borderBottom: activeTab === key ? `2px solid ${theme.tealDeep}` : '2px solid transparent', color: activeTab === key ? theme.navy : theme.textLight, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
+              {label}
+            </button>
           ))}
         </div>
+
+        {/* Playlists tab */}
+        {activeTab === 'playlists' && (
+          playlists.length === 0
+            ? <p style={{ textAlign: 'center', fontSize: 13, color: theme.textLight, padding: '20px 0' }}>No playlists yet.</p>
+            : playlists.map(pl => (
+                <Link key={pl.id} to={`/playlist/${pl.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: theme.cardBg, border: `1px solid ${theme.border}`, borderRadius: 12, marginBottom: 8, textDecoration: 'none' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: theme.heroGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎬</div>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.navy }}>{pl.title}</p>
+                    {pl.description && <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.textLight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.description}</p>}
+                  </div>
+                  <span style={{ color: theme.textLight }}>›</span>
+                </Link>
+              ))
+        )}
+
+        {/* Posts / Reposts grid */}
+        {activeTab !== 'playlists' && (() => {
+          const list = activeTab === 'reposts'
+            ? posts.filter(p => (p.content || '').startsWith('🔁'))
+            : posts.filter(p => !(p.content || '').startsWith('🔁'))
+          if (list.length === 0) return <p style={{ textAlign: 'center', fontSize: 13, color: theme.textLight, padding: '24px 0' }}>Nothing here yet.</p>
+          const typeIcon = { question: '❓', review: '⭐', article: '📄', premium: '💎', visual: '🎨' }
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {list.map(post => (
+                <button key={post.id} onClick={() => setOpenPost(post)} style={{ textAlign: 'left', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden', background: theme.cardBg, height: 150, display: 'flex', flexDirection: 'column' }}>
+                    {post.image_url ? (
+                      <div style={{ height: 80, background: `url(${post.image_url}) center/cover` }} />
+                    ) : (
+                      <div style={{ height: 80, background: post.post_type === 'visual' ? (visualThemes[post.theme] || visualThemes.teal) : theme.heroGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>{typeIcon[post.post_type] || '💬'}</div>
+                    )}
+                    <div style={{ padding: '8px 10px', flex: 1, overflow: 'hidden' }}>
+                      {post.post_type && post.post_type !== 'text' && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{typeIcon[post.post_type]} {post.post_type}</span>}
+                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(post.content || '').replace(/^🔁\s*/, '')}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
       </div>
+
+      {/* Expanded post */}
+      {openPost && (
+        <div onClick={() => setOpenPost(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '80vh', overflowY: 'auto', padding: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setOpenPost(null)} style={{ background: 'none', border: 'none', fontSize: 22, color: theme.textLight }}>✕</button>
+            </div>
+            {openPost.image_url && <img src={openPost.image_url} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
+            {openPost.post_type === 'visual' && !openPost.image_url && (
+              <div style={{ background: visualThemes[openPost.theme] || visualThemes.teal, padding: 22, borderRadius: 12, marginBottom: 12 }}>
+                <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>{openPost.content}</p>
+              </div>
+            )}
+            {openPost.post_type !== 'visual' && <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{(openPost.content || '').replace(/^🔁\s*/, '')}</p>}
+            <p style={{ margin: '12px 0 0 0', fontSize: 11, color: theme.textLight }}>{openPost.created_at ? timeAgo(openPost.created_at) : ''}</p>
+          </div>
+        </div>
+      )}
 
       {/* Story viewer */}
       {viewerIndex !== null && userStories[viewerIndex] && (
