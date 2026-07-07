@@ -24,11 +24,39 @@ function Profile() {
   const [loading, setLoading] = useState(true)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [activeBiz, setActiveBiz] = useState(getActiveBusiness())
+  const [activeTab, setActiveTab] = useState('posts')
+  const [myPosts, setMyPosts] = useState([])
+  const [savedPosts, setSavedPosts] = useState([])
+  const [tabLoading, setTabLoading] = useState(false)
+  const [openPost, setOpenPost] = useState(null)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
     loadProfile()
+    loadMyPosts()
+    loadSavedPosts()
   }, [user])
+
+  async function loadMyPosts() {
+    if (!user) return
+    const { data } = await supabase
+      .from('posts')
+      .select('id, content, created_at, post_type, image_url')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(60)
+    setMyPosts(data || [])
+  }
+
+  async function loadSavedPosts() {
+    if (!user) return
+    const { data } = await supabase
+      .from('saved_posts')
+      .select('post_id, posts(id, content, created_at, post_type, image_url)')
+      .eq('user_id', user.id)
+      .limit(60)
+    setSavedPosts((data || []).map(s => s.posts).filter(Boolean))
+  }
 
   async function loadProfile() {
     setLoading(true)
@@ -248,6 +276,43 @@ function Profile() {
           })}
         </div>
 
+        {/* Content tabs */}
+        <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
+          {[['posts', '📝 Posts'], ['reposts', '🔁 Reposts'], ['saved', '🔖 Saved']].map(([key, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', borderBottom: activeTab === key ? `2px solid ${theme.tealDeep}` : '2px solid transparent', color: activeTab === key ? theme.navy : theme.textLight, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content grid */}
+        {(() => {
+          const list = activeTab === 'saved' ? savedPosts : activeTab === 'reposts' ? myPosts.filter(p => (p.content || '').startsWith('🔁')) : myPosts.filter(p => !(p.content || '').startsWith('🔁'))
+          if (list.length === 0) {
+            return <p style={{ textAlign: 'center', fontSize: 13, color: theme.textLight, padding: '24px 0' }}>Nothing here yet.</p>
+          }
+          const typeIcon = { question: '❓', review: '⭐', article: '📄', premium: '💎' }
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+              {list.map(p => (
+                <button key={p.id} onClick={() => setOpenPost(p)} style={{ textAlign: 'left', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <div style={{ border: `1px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden', background: theme.cardBg, height: 150, display: 'flex', flexDirection: 'column' }}>
+                    {p.image_url ? (
+                      <div style={{ height: 80, background: `url(${p.image_url}) center/cover` }} />
+                    ) : (
+                      <div style={{ height: 80, background: theme.heroGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>{typeIcon[p.post_type] || '💬'}</div>
+                    )}
+                    <div style={{ padding: '8px 10px', flex: 1, overflow: 'hidden' }}>
+                      {p.post_type && p.post_type !== 'text' && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{typeIcon[p.post_type]} {p.post_type}</span>}
+                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(p.content || '').replace(/^🔁\s*/, '')}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Links */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
           <Link to="/saved" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 4px', textDecoration: 'none', color: theme.navy, borderBottom: `1px solid ${theme.border}` }}>
@@ -270,6 +335,20 @@ function Profile() {
           Sign Out
         </button>
       </div>
+
+      {openPost && (
+        <div onClick={() => setOpenPost(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '80vh', overflowY: 'auto', padding: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setOpenPost(null)} style={{ background: 'none', border: 'none', fontSize: 22, color: theme.textLight }}>✕</button>
+            </div>
+            {openPost.image_url && <img src={openPost.image_url} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
+            {openPost.post_type && openPost.post_type !== 'text' && <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{openPost.post_type}</span>}
+            <p style={{ margin: '6px 0 0 0', fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{(openPost.content || '').replace(/^🔁\s*/, '')}</p>
+            <p style={{ margin: '12px 0 0 0', fontSize: 11, color: theme.textLight }}>{openPost.created_at ? new Date(openPost.created_at).toLocaleDateString() : ''}</p>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
