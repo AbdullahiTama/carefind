@@ -24,6 +24,8 @@ import NewsArticle from './NewsArticle.jsx'
 import LiveSession from './LiveSession.jsx'
 import Notifications from './Notifications.jsx'
 import LiveShow from './LiveShow.jsx'
+import PlaylistCreate from './PlaylistCreate.jsx'
+import PlaylistView from './PlaylistView.jsx'
 import LiveDashboard from './LiveDashboard.jsx'
 
 const AdminPanel = lazy(() => import('./AdminPanel.jsx'))
@@ -60,6 +62,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/live/:id" element={<LiveSession />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/live-show/:id" element={<LiveShow />} />
+          <Route path="/playlist/create" element={<PlaylistCreate />} />
+          <Route path="/playlist/:id" element={<PlaylistView />} />
           <Route path="/live-dashboard/:id" element={<LiveDashboard />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin-login" element={<AdminLogin />} />
