@@ -166,6 +166,12 @@ function LiveDashboard() {
   )
 
   const ended = show.status === 'ended'
+  const scheduled = show.status === 'scheduled'
+
+  async function startNow() {
+    await supabase.from('live_shows').update({ status: 'live', started_at: new Date().toISOString() }).eq('id', id)
+    load()
+  }
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 30, background: '#fff', minHeight: '100vh' }}>
@@ -191,7 +197,15 @@ function LiveDashboard() {
         </div>
       </div>
 
-      {!ended && (
+      {scheduled && (
+        <div style={{ margin: 14, padding: 16, background: theme.navy, borderRadius: 14, color: '#fff', textAlign: 'center' }}>
+          <p style={{ margin: '0 0 4px 0', fontSize: 13, fontWeight: 800 }}>⏳ This show is scheduled</p>
+          <p style={{ margin: '0 0 12px 0', fontSize: 11.5, color: 'rgba(255,255,255,0.7)' }}>Your audience sees a countdown. When you're ready, start it live.</p>
+          <button onClick={startNow} style={{ padding: '11px 24px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14 }}>📡 Start Live Now</button>
+        </div>
+      )}
+
+      {!ended && !scheduled && (
         <>
           {/* Composer */}
           <div style={{ padding: 14, borderBottom: `1px solid ${theme.border}` }}>
