@@ -30,6 +30,7 @@ function Profile() {
   const [myPlaylists, setMyPlaylists] = useState([])
   const [tabLoading, setTabLoading] = useState(false)
   const [openPost, setOpenPost] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -222,6 +223,13 @@ function Profile() {
           <div><p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followingCount}</p><p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Following</p></div>
         </div>
 
+        {/* Account menu toggle */}
+        <button onClick={() => setMenuOpen(m => !m)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, marginBottom: 14, cursor: 'pointer' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.navy }}>☰ Account, Wallet & Businesses</span>
+          <span style={{ fontSize: 13, color: theme.textLight }}>{menuOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {menuOpen && (<>
         {/* Wallet */}
         <Link to="/wallet" style={{ textDecoration: 'none' }}>
           <div style={{ background: theme.heroGradient, borderRadius: 16, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -287,6 +295,7 @@ function Profile() {
             )
           })}
         </div>
+        </>)}
 
         {/* Content tabs */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
@@ -350,6 +359,7 @@ function Profile() {
           )
         })()}
 
+        {menuOpen && (<>
         {/* Links */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
           <Link to="/saved" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 4px', textDecoration: 'none', color: theme.navy, borderBottom: `1px solid ${theme.border}` }}>
@@ -371,6 +381,7 @@ function Profile() {
         <button onClick={handleSignOut} style={{ width: '100%', padding: 13, background: '#fef2f2', color: theme.alert, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, marginBottom: 8 }}>
           Sign Out
         </button>
+        </>)}
       </div>
 
       {openPost && (
