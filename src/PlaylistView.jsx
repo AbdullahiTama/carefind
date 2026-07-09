@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
+import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 
@@ -8,6 +9,7 @@ import BottomNav from './BottomNav.jsx'
 function PlaylistView() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [playlist, setPlaylist] = useState(null)
   const [parts, setParts] = useState([])
   const [current, setCurrent] = useState(0)
@@ -79,6 +81,11 @@ function PlaylistView() {
       {/* All parts list */}
       <div style={{ padding: '0 18px 18px' }}>
         <p style={{ margin: '0 0 10px 0', fontSize: 12, fontWeight: 800, color: theme.navy, textTransform: 'uppercase', letterSpacing: '0.04em' }}>All parts</p>
+        {user && playlist.owner_id === user.id && (
+          <Link to={`/playlist/${id}/add`} style={{ display: 'block', textAlign: 'center', padding: 11, background: theme.tealGradient, color: '#fff', borderRadius: 10, fontWeight: 800, fontSize: 13, textDecoration: 'none', marginBottom: 10 }}>
+            ➕ Add another part
+          </Link>
+        )}
         {parts.map((p, i) => (
           <button key={p.id} onClick={() => setCurrent(i)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', background: i === current ? theme.bg : '#fff', border: `1px solid ${theme.border}`, borderRadius: 10, marginBottom: 8, textAlign: 'left', cursor: 'pointer' }}>
             <span style={{ width: 28, height: 28, borderRadius: '50%', background: i === current ? theme.tealGradient : theme.bg, color: i === current ? '#fff' : theme.textMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
