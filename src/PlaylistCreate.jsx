@@ -4,12 +4,22 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
+import DrawingBoard from './DrawingBoard.jsx'
 
-// Create a playlist, then add parts one by one (text, image, or video).
+const VISUAL_THEMES = {
+  teal: 'linear-gradient(135deg, #0d9488, #14b8a6)',
+  ocean: 'linear-gradient(135deg, #0369a1, #0ea5e9)',
+  night: 'linear-gradient(135deg, #1e293b, #334155)',
+  forest: 'linear-gradient(135deg, #166534, #22c55e)',
+  pulse: 'linear-gradient(135deg, #be185d, #f43f5e)',
+}
+
+// Create a playlist, then add rich parts one by one.
+// Part types: text, visual, question, review, article, image, video, drawing.
 function PlaylistCreate() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [step, setStep] = useState('info') // 'info' | 'parts'
+  const [step, setStep] = useState('info')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [playlistId, setPlaylistId] = useState(null)
@@ -17,12 +27,22 @@ function PlaylistCreate() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Draft part being built
+  // Draft part
   const [pTitle, setPTitle] = useState('')
   const [pKind, setPKind] = useState('text')
   const [pText, setPText] = useState('')
+  const [pTheme, setPTheme] = useState('teal')
+  const [pRating, setPRating] = useState(5)
   const [pFile, setPFile] = useState(null)
+  const [drawBlob, setDrawBlob] = useState(null)
+  const [showDraw, setShowDraw] = useState(false)
   const [addingPart, setAddingPart] = useState(false)
+
+  const KINDS = [
+    ['text', '📝 Text'], ['visual', '🎨 Visual'], ['question', '❓ Question'],
+    ['review', '⭐ Review'], ['article', '📄 Article'], ['image', '🖼 Image'],
+    ['video', '🎥 Video'], ['drawing', '✏️ Drawing'],
+  ]
 
   async function createPlaylist() {
     if (!title.trim()) { setError('Give your playlist a title.'); return }
@@ -36,25 +56,38 @@ function PlaylistCreate() {
     setSaving(false)
   }
 
+  function resetDraft() {
+    setPTitle(''); setPText(''); setPFile(null); setDrawBlob(null)
+    setPKind('text'); setPTheme('teal'); setPRating(5)
+  }
+
   async function addPart() {
     if (!pTitle.trim()) { setError('Give this part a title.'); return }
     setAddingPart(true); setError('')
     let mediaUrl = null
-    if ((pKind === 'image' || pKind === 'video') && pFile) {
-      const ext = pFile.name.split('.').pop() || (pKind === 'video' ? 'mp4' : 'jpg')
+    // Upload media for image/video/drawing
+    let uploadBlob = null, ext = 'jpg', ctype = 'image/jpeg'
+    if (pKind === 'image' && pFile) { uploadBlob = pFile; ext = pFile.name.split('.').pop() || 'jpg'; ctype = pFile.type }
+    else if (pKind === 'video' && pFile) { uploadBlob = pFile; ext = pFile.name.split('.').pop() || 'mp4'; ctype = pFile.type }
+    else if (pKind === 'drawing' && drawBlob) { uploadBlob = drawBlob; ext = 'png'; ctype = 'image/png' }
+    if (uploadBlob) {
       const path = `playlist-${playlistId}-${Date.now()}.${ext}`
-      const { error: upErr } = await supabase.storage.from('live-media').upload(path, pFile, { contentType: pFile.type })
+      const { error: upErr } = await supabase.storage.from('live-media').upload(path, uploadBlob, { contentType: ctype })
       if (upErr) { setError('Media upload failed: ' + upErr.message); setAddingPart(false); return }
       const { data: urlData } = supabase.storage.from('live-media').getPublicUrl(path)
       mediaUrl = urlData.publicUrl
     }
+    // Store extra styling in content as a JSON prefix for visual/review, else plain text
+    let content = pText.trim() || null
+    if (pKind === 'visual') content = JSON.stringify({ theme: pTheme, text: pText.trim() })
+    if (pKind === 'review') content = JSON.stringify({ rating: pRating, text: pText.trim() })
     const { data, error: insErr } = await supabase.from('playlist_parts').insert({
       playlist_id: playlistId, position: parts.length, title: pTitle.trim(),
-      kind: pKind, content: pText.trim() || null, media_url: mediaUrl,
+      kind: pKind, content, media_url: mediaUrl,
     }).select().maybeSingle()
     if (insErr) { setError('Could not add part: ' + insErr.message); setAddingPart(false); return }
     setParts(prev => [...prev, data])
-    setPTitle(''); setPText(''); setPFile(null); setPKind('text')
+    resetDraft()
     setAddingPart(false)
   }
 
@@ -65,7 +98,7 @@ function PlaylistCreate() {
       <div style={{ background: theme.heroGradient, padding: '18px 16px', color: '#fff' }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>← Back</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>🎬 Create Playlist</h1>
-        <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.7)' }}>Build a series part by part — like a show in episodes.</p>
+        <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.7)' }}>Build a series part by part.</p>
       </div>
 
       <div style={{ padding: 18 }}>
@@ -85,7 +118,6 @@ function PlaylistCreate() {
 
         {step === 'parts' && (
           <div>
-            {/* Existing parts */}
             {parts.length > 0 && (
               <div style={{ marginBottom: 18 }}>
                 <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>{parts.length} part{parts.length !== 1 ? 's' : ''} added</p>
@@ -99,22 +131,64 @@ function PlaylistCreate() {
               </div>
             )}
 
-            {/* Add a part */}
             <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 14, padding: 14, marginBottom: 18 }}>
               <p style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 800, color: theme.navy }}>➕ Add Part {parts.length + 1}</p>
               <input value={pTitle} onChange={(e) => setPTitle(e.target.value)} placeholder="Part title (e.g. What is insulin?)" style={{ ...inputStyle, marginBottom: 10 }} />
-              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                {['text', 'image', 'video'].map(k => (
-                  <button key={k} onClick={() => setPKind(k)} style={{ flex: 1, padding: 8, borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 12, background: pKind === k ? theme.tealDeep : theme.bg, color: pKind === k ? '#fff' : theme.textMid, textTransform: 'capitalize' }}>{k}</button>
+
+              {/* Kind picker */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {KINDS.map(([k, label]) => (
+                  <button key={k} onClick={() => setPKind(k)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 11.5, background: pKind === k ? theme.tealDeep : theme.bg, color: pKind === k ? '#fff' : theme.textMid }}>{label}</button>
                 ))}
               </div>
-              <textarea value={pText} onChange={(e) => setPText(e.target.value)} placeholder={pKind === 'text' ? 'Write this part…' : 'Caption (optional)'} rows={3} style={{ ...inputStyle, marginBottom: 10, resize: 'none' }} />
+
+              {/* Type-specific inputs */}
+              {pKind === 'visual' && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ background: VISUAL_THEMES[pTheme], borderRadius: 12, padding: 20, marginBottom: 8 }}>
+                    <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>{pText || 'Your visual text…'}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {Object.keys(VISUAL_THEMES).map(t => (
+                      <button key={t} onClick={() => setPTheme(t)} style={{ width: 30, height: 30, borderRadius: '50%', background: VISUAL_THEMES[t], border: pTheme === t ? `3px solid ${theme.navy}` : 'none' }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {pKind === 'review' && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button key={n} onClick={() => setPRating(n)} style={{ background: 'none', border: 'none', fontSize: 26, cursor: 'pointer' }}>{n <= pRating ? '⭐' : '☆'}</button>
+                  ))}
+                </div>
+              )}
+
               {(pKind === 'image' || pKind === 'video') && (
                 <label style={{ display: 'block', fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
                   📎 {pFile ? pFile.name.slice(0, 26) : `Choose ${pKind} file`}
                   <input type="file" accept={pKind === 'image' ? 'image/*' : 'video/*'} onChange={(e) => setPFile(e.target.files[0] || null)} style={{ display: 'none' }} />
                 </label>
               )}
+
+              {pKind === 'drawing' && (
+                <div style={{ marginBottom: 10 }}>
+                  {drawBlob ? (
+                    <div>
+                      <img src={URL.createObjectURL(drawBlob)} alt="drawing" style={{ width: '100%', maxWidth: 200, borderRadius: 10, border: `1px solid ${theme.border}`, display: 'block', marginBottom: 6 }} />
+                      <button onClick={() => setShowDraw(true)} style={{ fontSize: 12, color: theme.tealDeep, background: 'none', border: 'none', fontWeight: 700 }}>Redraw</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowDraw(true)} style={{ padding: '10px 16px', background: theme.bg, color: theme.navy, border: `1px solid ${theme.border}`, borderRadius: 10, fontWeight: 700, fontSize: 13 }}>✏️ Open drawing board</button>
+                  )}
+                </div>
+              )}
+
+              {/* Text / caption — shown for all except pure media without caption need */}
+              {pKind !== 'drawing' && (
+                <textarea value={pText} onChange={(e) => setPText(e.target.value)} placeholder={pKind === 'text' || pKind === 'article' ? 'Write this part…' : pKind === 'visual' ? 'Text for the visual card…' : 'Caption (optional)'} rows={pKind === 'article' ? 6 : 3} style={{ ...inputStyle, marginBottom: 10, resize: 'none' }} />
+              )}
+
               <button onClick={addPart} disabled={addingPart} style={{ width: '100%', padding: 11, background: theme.navy, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}>
                 {addingPart ? 'Adding…' : '+ Add this part'}
               </button>
@@ -126,6 +200,13 @@ function PlaylistCreate() {
           </div>
         )}
       </div>
+
+      {showDraw && (
+        <DrawingBoard
+          onSave={(blob) => { setDrawBlob(blob); setShowDraw(false) }}
+          onCancel={() => setShowDraw(false)}
+        />
+      )}
 
       <BottomNav />
     </div>
