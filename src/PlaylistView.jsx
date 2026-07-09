@@ -112,7 +112,7 @@ function PlaylistView() {
               </button>
               {isOwner && (
                 <>
-                  <button onClick={() => editPartTitle(p)} style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px 9px', fontSize: 13 }}>✏️</button>
+                  <button onClick={() => navigate(`/playlist/${id}/edit/${p.id}`)} style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px 9px', fontSize: 13 }}>✏️</button>
                   <button onClick={() => deletePart(p.id)} style={{ background: '#fef2f2', border: `1px solid ${theme.alert}`, borderRadius: 8, padding: '8px 9px', fontSize: 13 }}>🗑</button>
                 </>
               )}
