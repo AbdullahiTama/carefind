@@ -4,6 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
+import { renderRichText } from './richText.jsx'
 
 // Watch a playlist: a list of parts, tap to view; an "Up next" prompt to continue.
 function PlaylistView() {
@@ -24,6 +25,20 @@ function PlaylistView() {
     setPlaylist(pl)
     setParts(pts || [])
     setLoading(false)
+  }
+
+  async function deletePart(partId) {
+    if (!window.confirm('Delete this part? This cannot be undone.')) return
+    await supabase.from('playlist_parts').delete().eq('id', partId)
+    if (current >= parts.length - 1) setCurrent(Math.max(0, current - 1))
+    load()
+  }
+
+  async function editPartTitle(part) {
+    const newTitle = window.prompt('Edit part title:', part.title)
+    if (newTitle == null || !newTitle.trim()) return
+    await supabase.from('playlist_parts').update({ title: newTitle.trim() }).eq('id', part.id)
+    load()
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: theme.textLight }}>Loading…</div>
@@ -62,7 +77,7 @@ function PlaylistView() {
               let d = {}; try { d = JSON.parse(part.content || '{}') } catch (e) { d = { text: part.content, rating: 0 } }
               return <div><p style={{ fontSize: 22, margin: '0 0 8px 0' }}>{'⭐'.repeat(d.rating || 0)}{'☆'.repeat(5 - (d.rating || 0))}</p><p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{d.text}</p></div>
             }
-            if (part.content) return <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{part.content}</p>
+            if (part.content) return <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{renderRichText(part.content)}</p>
             return null
           })()}
 
@@ -86,13 +101,24 @@ function PlaylistView() {
             ➕ Add another part
           </Link>
         )}
-        {parts.map((p, i) => (
-          <button key={p.id} onClick={() => setCurrent(i)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', background: i === current ? theme.bg : '#fff', border: `1px solid ${theme.border}`, borderRadius: 10, marginBottom: 8, textAlign: 'left', cursor: 'pointer' }}>
-            <span style={{ width: 28, height: 28, borderRadius: '50%', background: i === current ? theme.tealGradient : theme.bg, color: i === current ? '#fff' : theme.textMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: theme.navy, flex: 1 }}>{p.title}</span>
-            {p.kind !== 'text' && <span style={{ fontSize: 14 }}>{p.kind === 'video' ? '🎥' : '🖼'}</span>}
-          </button>
-        ))}
+        {parts.map((p, i) => {
+          const isOwner = user && playlist.owner_id === user.id
+          return (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <button onClick={() => setCurrent(i)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', background: i === current ? theme.bg : '#fff', border: `1px solid ${theme.border}`, borderRadius: 10, textAlign: 'left', cursor: 'pointer' }}>
+                <span style={{ width: 28, height: 28, borderRadius: '50%', background: i === current ? theme.tealGradient : theme.bg, color: i === current ? '#fff' : theme.textMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: theme.navy, flex: 1 }}>{p.title}</span>
+                {p.kind !== 'text' && <span style={{ fontSize: 14 }}>{p.kind === 'video' ? '🎥' : p.kind === 'drawing' ? '✏️' : p.kind === 'image' ? '🖼' : ''}</span>}
+              </button>
+              {isOwner && (
+                <>
+                  <button onClick={() => editPartTitle(p)} style={{ background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px 9px', fontSize: 13 }}>✏️</button>
+                  <button onClick={() => deletePart(p.id)} style={{ background: '#fef2f2', border: `1px solid ${theme.alert}`, borderRadius: 8, padding: '8px 9px', fontSize: 13 }}>🗑</button>
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <BottomNav />
