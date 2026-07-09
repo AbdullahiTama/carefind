@@ -47,9 +47,22 @@ function PlaylistView() {
         <div style={{ padding: 18 }}>
           <p style={{ margin: '0 0 4px 0', fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>Part {current + 1} of {parts.length}</p>
           <h2 style={{ margin: '0 0 12px 0', fontSize: 18, fontWeight: 800, color: theme.navy }}>{part.title}</h2>
-          {part.kind === 'image' && part.media_url && <img src={part.media_url} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
+          {(part.kind === 'image' || part.kind === 'drawing') && part.media_url && <img src={part.media_url} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
           {part.kind === 'video' && part.media_url && <video src={part.media_url} controls playsInline style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
-          {part.content && <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{part.content}</p>}
+          {(() => {
+            // Visual and review store JSON in content
+            if (part.kind === 'visual') {
+              let d = {}; try { d = JSON.parse(part.content || '{}') } catch (e) { d = { text: part.content } }
+              const themes = { teal: 'linear-gradient(135deg, #0d9488, #14b8a6)', ocean: 'linear-gradient(135deg, #0369a1, #0ea5e9)', night: 'linear-gradient(135deg, #1e293b, #334155)', forest: 'linear-gradient(135deg, #166534, #22c55e)', pulse: 'linear-gradient(135deg, #be185d, #f43f5e)' }
+              return <div style={{ background: themes[d.theme] || themes.teal, borderRadius: 12, padding: 26, marginBottom: 12 }}><p style={{ color: '#fff', fontSize: 18, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>{d.text}</p></div>
+            }
+            if (part.kind === 'review') {
+              let d = {}; try { d = JSON.parse(part.content || '{}') } catch (e) { d = { text: part.content, rating: 0 } }
+              return <div><p style={{ fontSize: 22, margin: '0 0 8px 0' }}>{'⭐'.repeat(d.rating || 0)}{'☆'.repeat(5 - (d.rating || 0))}</p><p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{d.text}</p></div>
+            }
+            if (part.content) return <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{part.content}</p>
+            return null
+          })()}
 
           {/* Up next */}
           {hasNext ? (
