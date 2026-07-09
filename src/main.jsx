@@ -64,6 +64,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/live-show/:id" element={<LiveShow />} />
           <Route path="/playlist/create" element={<PlaylistCreate />} />
           <Route path="/playlist/:id/add" element={<PlaylistCreate />} />
+          <Route path="/playlist/:id/edit/:partId" element={<PlaylistCreate />} />
           <Route path="/playlist/:id" element={<PlaylistView />} />
           <Route path="/live-dashboard/:id" element={<LiveDashboard />} />
           <Route path="/admin" element={<AdminLogin />} />
