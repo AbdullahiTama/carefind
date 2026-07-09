@@ -4,6 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
+import { renderRichText, stripMarkers } from './richText.jsx'
 import { getActiveBusiness, setActiveBusiness, clearActiveBusiness } from './lib/activeIdentity'
 
 function Profile() {
@@ -31,6 +32,14 @@ function Profile() {
   const [tabLoading, setTabLoading] = useState(false)
   const [openPost, setOpenPost] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [myStories, setMyStories] = useState([])
+  const [storyComposer, setStoryComposer] = useState(false)
+  const [sTitle, setSTitle] = useState('')
+  const [sBody, setSBody] = useState('')
+  const [sBg, setSBg] = useState('#0f766e')
+  const [sImage, setSImage] = useState(null)
+  const [postingStory, setPostingStory] = useState(false)
+  const [viewStory, setViewStory] = useState(null)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -38,6 +47,7 @@ function Profile() {
     loadMyPosts()
     loadSavedPosts()
     loadMyPlaylists()
+    loadMyStories()
   }, [user])
 
   async function loadMyPosts() {
@@ -69,6 +79,45 @@ function Profile() {
       .eq('owner_id', user.id)
       .order('created_at', { ascending: false })
     setMyPlaylists(data || [])
+  }
+
+  async function loadMyStories() {
+    if (!user) return
+    const { data } = await supabase
+      .from('stories')
+      .select('id, title, body, image_url, bg_color, created_at')
+      .eq('user_id', user.id)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+    setMyStories(data || [])
+  }
+
+  async function postStory() {
+    if (!sTitle.trim() && !sBody.trim() && !sImage) return
+    setPostingStory(true)
+    let imageUrl = null
+    if (sImage) {
+      const ext = sImage.name.split('.').pop()
+      const path = `user-${user.id}-${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('story-images').upload(path, sImage)
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('story-images').getPublicUrl(path)
+        imageUrl = urlData.publicUrl
+      }
+    }
+    const expiresAt = new Date(Date.now() + 24 * 3600000).toISOString()
+    const { error } = await supabase.from('stories').insert({
+      title: sTitle.trim() || null, body: sBody.trim() || null,
+      image_url: imageUrl, bg_color: sBg, is_platform: false,
+      user_id: user.id, expires_at: expiresAt,
+    })
+    setPostingStory(false)
+    if (!error) {
+      setSTitle(''); setSBody(''); setSBg('#0f766e'); setSImage(null); setStoryComposer(false)
+      loadMyStories()
+    } else {
+      alert('Could not post story: ' + error.message)
+    }
   }
 
   async function loadProfile() {
@@ -223,6 +272,22 @@ function Profile() {
           <div><p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followingCount}</p><p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Following</p></div>
         </div>
 
+        {/* My Stories */}
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 6, marginBottom: 12 }}>
+          <button onClick={() => setStoryComposer(true)} style={{ flexShrink: 0, width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}>
+            <div style={{ width: 58, height: 58, borderRadius: '50%', background: theme.bg, border: `2px dashed ${theme.tealDeep}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: theme.tealDeep }}>+</div>
+            <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMid }}>Add story</span>
+          </button>
+          {myStories.map((s) => (
+            <button key={s.id} onClick={() => setViewStory(s)} style={{ flexShrink: 0, width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}>
+              <div style={{ width: 58, height: 58, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #0d9488, #f59e0b)' }}>
+                <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: s.image_url ? `url(${s.image_url}) center/cover` : (s.bg_color || theme.tealDeep), border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 800 }}>{!s.image_url && (s.title?.[0] || '📖')}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: theme.textMid, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || 'Story'}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Account menu toggle */}
         <button onClick={() => setMenuOpen(m => !m)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 12, marginBottom: 14, cursor: 'pointer' }}>
           <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.navy }}>☰ Account, Wallet & Businesses</span>
@@ -350,7 +415,7 @@ function Profile() {
                     )}
                     <div style={{ padding: '8px 10px', flex: 1, overflow: 'hidden' }}>
                       {p.post_type && p.post_type !== 'text' && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{typeIcon[p.post_type]} {p.post_type}</span>}
-                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(p.content || '').replace(/^🔁\s*/, '')}</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkers((p.content || '').replace(/^🔁\s*/, ''))}</p>
                     </div>
                   </div>
                 </button>
@@ -392,9 +457,47 @@ function Profile() {
             </div>
             {openPost.image_url && <img src={openPost.image_url} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
             {openPost.post_type && openPost.post_type !== 'text' && <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{openPost.post_type}</span>}
-            <p style={{ margin: '6px 0 0 0', fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{(openPost.content || '').replace(/^🔁\s*/, '')}</p>
+            <p style={{ margin: '6px 0 0 0', fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{renderRichText((openPost.content || '').replace(/^🔁\s*/, ''))}</p>
             <p style={{ margin: '12px 0 0 0', fontSize: 11, color: theme.textLight }}>{openPost.created_at ? new Date(openPost.created_at).toLocaleDateString() : ''}</p>
           </div>
+        </div>
+      )}
+
+      {/* Story composer */}
+      {storyComposer && (
+        <div onClick={() => setStoryComposer(false)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, padding: 20, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: theme.navy }}>Add to your story</h3>
+              <button onClick={() => setStoryComposer(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: theme.textLight }}>✕</button>
+            </div>
+            <div style={{ background: sBg, borderRadius: 14, padding: 20, marginBottom: 12, minHeight: 90 }}>
+              <input value={sTitle} onChange={(e) => setSTitle(e.target.value)} placeholder="Story title…" style={{ width: '100%', background: 'none', border: 'none', color: '#fff', fontSize: 17, fontWeight: 800, outline: 'none', marginBottom: 6, boxSizing: 'border-box' }} />
+              <textarea value={sBody} onChange={(e) => setSBody(e.target.value)} placeholder="Say something…" rows={2} style={{ width: '100%', background: 'none', border: 'none', color: '#fff', fontSize: 14, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              {['#0f766e', '#1e293b', '#be185d', '#0369a1', '#166534', '#b45309'].map(c => (
+                <button key={c} onClick={() => setSBg(c)} style={{ width: 30, height: 30, borderRadius: '50%', background: c, border: sBg === c ? '3px solid #333' : 'none' }} />
+              ))}
+            </div>
+            <label style={{ display: 'block', fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
+              📷 {sImage ? sImage.name.slice(0, 24) : 'Add a photo (optional)'}
+              <input type="file" accept="image/*" onChange={(e) => setSImage(e.target.files[0] || null)} style={{ display: 'none' }} />
+            </label>
+            <button onClick={postStory} disabled={postingStory} style={{ width: '100%', padding: 13, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14 }}>
+              {postingStory ? 'Posting…' : 'Post story'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Story viewer */}
+      {viewStory && (
+        <div onClick={() => setViewStory(null)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: viewStory.image_url ? '#000' : (viewStory.bg_color || theme.tealDeep), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          {viewStory.image_url && <img src={viewStory.image_url} alt="" style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 12, marginBottom: 16 }} />}
+          {viewStory.title && <h2 style={{ color: '#fff', fontSize: 24, fontWeight: 900, textAlign: 'center', margin: '0 0 10px 0' }}>{viewStory.title}</h2>}
+          {viewStory.body && <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16, textAlign: 'center', margin: 0, lineHeight: 1.5 }}>{viewStory.body}</p>}
+          <button onClick={() => setViewStory(null)} style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', borderRadius: '50%', width: 34, height: 34, fontSize: 18 }}>✕</button>
         </div>
       )}
 
