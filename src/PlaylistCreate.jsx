@@ -20,8 +20,9 @@ const VISUAL_THEMES = {
 function PlaylistCreate() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { id: existingId } = useParams()
+  const { id: existingId, partId: editPartId } = useParams()
   const [step, setStep] = useState(existingId ? 'parts' : 'info')
+  const [editingId, setEditingId] = useState(editPartId || null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [playlistId, setPlaylistId] = useState(existingId || null)
@@ -46,7 +47,23 @@ function PlaylistCreate() {
         if (data) setParts(data)
       })
     }
-  }, [existingId])
+    if (editPartId) {
+      supabase.from('playlist_parts').select('*').eq('id', editPartId).maybeSingle().then(({ data }) => {
+        if (data) {
+          setPTitle(data.title || '')
+          setPKind(data.kind || 'text')
+          // Unpack visual/review JSON content
+          if (data.kind === 'visual') {
+            try { const d = JSON.parse(data.content || '{}'); setPText(d.text || ''); setPTheme(d.theme || 'teal') } catch (e) { setPText(data.content || '') }
+          } else if (data.kind === 'review') {
+            try { const d = JSON.parse(data.content || '{}'); setPText(d.text || ''); setPRating(d.rating || 5) } catch (e) { setPText(data.content || '') }
+          } else {
+            setPText(data.content || '')
+          }
+        }
+      })
+    }
+  }, [existingId, editPartId])
 
   const KINDS = [
     ['text', '📝 Text'], ['visual', '🎨 Visual'], ['question', '❓ Question'],
@@ -91,6 +108,18 @@ function PlaylistCreate() {
     let content = pText.trim() || null
     if (pKind === 'visual') content = JSON.stringify({ theme: pTheme, text: pText.trim() })
     if (pKind === 'review') content = JSON.stringify({ rating: pRating, text: pText.trim() })
+
+    if (editingId) {
+      // EDIT existing part
+      const updates = { title: pTitle.trim(), kind: pKind, content }
+      if (mediaUrl) updates.media_url = mediaUrl // only replace media if new one uploaded
+      const { error: upErr2 } = await supabase.from('playlist_parts').update(updates).eq('id', editingId)
+      if (upErr2) { setError('Could not save: ' + upErr2.message); setAddingPart(false); return }
+      setAddingPart(false)
+      navigate(`/playlist/${existingId || playlistId}`)
+      return
+    }
+
     const { data, error: insErr } = await supabase.from('playlist_parts').insert({
       playlist_id: playlistId, position: parts.length, title: pTitle.trim(),
       kind: pKind, content, media_url: mediaUrl,
@@ -128,7 +157,7 @@ function PlaylistCreate() {
 
         {step === 'parts' && (
           <div>
-            {parts.length > 0 && (
+            {!editingId && parts.length > 0 && (
               <div style={{ marginBottom: 18 }}>
                 <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>{parts.length} part{parts.length !== 1 ? 's' : ''} added</p>
                 {parts.map((p, i) => (
@@ -142,7 +171,7 @@ function PlaylistCreate() {
             )}
 
             <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 14, padding: 14, marginBottom: 18 }}>
-              <p style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 800, color: theme.navy }}>➕ Add Part {parts.length + 1}</p>
+              <p style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 800, color: theme.navy }}>{editingId ? '✏️ Edit Part' : `➕ Add Part ${parts.length + 1}`}</p>
               <input value={pTitle} onChange={(e) => setPTitle(e.target.value)} placeholder="Part title (e.g. What is insulin?)" style={{ ...inputStyle, marginBottom: 10 }} />
 
               {/* Kind picker */}
@@ -202,13 +231,15 @@ function PlaylistCreate() {
               )}
 
               <button onClick={addPart} disabled={addingPart} style={{ width: '100%', padding: 11, background: theme.navy, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}>
-                {addingPart ? 'Adding…' : '+ Add this part'}
+                {addingPart ? (editingId ? 'Saving…' : 'Adding…') : (editingId ? '✓ Save Changes' : '+ Add this part')}
               </button>
             </div>
 
-            <button onClick={() => navigate(`/playlist/${playlistId}`)} disabled={parts.length === 0} style={{ width: '100%', padding: 14, background: parts.length === 0 ? theme.border : theme.tealGradient, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15 }}>
-              {parts.length === 0 ? 'Add at least one part' : '✓ Done — View Playlist'}
-            </button>
+            {!editingId && (
+              <button onClick={() => navigate(`/playlist/${playlistId}`)} disabled={parts.length === 0} style={{ width: '100%', padding: 14, background: parts.length === 0 ? theme.border : theme.tealGradient, color: '#fff', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15 }}>
+                {parts.length === 0 ? 'Add at least one part' : '✓ Done — View Playlist'}
+              </button>
+            )}
           </div>
         )}
       </div>
