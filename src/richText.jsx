@@ -94,3 +94,13 @@ export function renderRichText(text) {
   }
   return parts
 }
+
+// Strip all markers, returning clean plain text (for previews).
+export function stripMarkers(text) {
+  if (!text) return ''
+  return text
+    .replace(/\{(h|c):\w+\}/g, '')
+    .replace(/\{\/(h|c)\}/g, '')
+    .replace(/\{[bisu]\}/g, '')
+    .replace(/\{\/[bisu]\}/g, '')
+}
