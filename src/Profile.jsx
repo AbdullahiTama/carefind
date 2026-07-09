@@ -33,6 +33,8 @@ function Profile() {
   const [openPost, setOpenPost] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [myStories, setMyStories] = useState([])
+  const [myShows, setMyShows] = useState([])
+  const [now, setNow] = useState(Date.now())
   const [storyComposer, setStoryComposer] = useState(false)
   const [sTitle, setSTitle] = useState('')
   const [sBody, setSBody] = useState('')
@@ -48,7 +50,13 @@ function Profile() {
     loadSavedPosts()
     loadMyPlaylists()
     loadMyStories()
+    loadMyShows()
   }, [user])
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   async function loadMyPosts() {
     if (!user) return
@@ -90,6 +98,17 @@ function Profile() {
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
     setMyStories(data || [])
+  }
+
+  async function loadMyShows() {
+    if (!user) return
+    const { data } = await supabase
+      .from('live_shows')
+      .select('id, title, status, scheduled_at')
+      .eq('host_id', user.id)
+      .in('status', ['live', 'scheduled'])
+      .order('scheduled_at', { ascending: true })
+    setMyShows(data || [])
   }
 
   async function postStory() {
@@ -278,6 +297,36 @@ function Profile() {
             <div style={{ width: 58, height: 58, borderRadius: '50%', background: theme.bg, border: `2px dashed ${theme.tealDeep}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: theme.tealDeep }}>+</div>
             <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMid }}>Add story</span>
           </button>
+
+          {/* Live / upcoming shows */}
+          {myShows.map((s) => {
+            if (s.status === 'live') {
+              return (
+                <Link key={s.id} to={`/live-show/${s.id}`} style={{ flexShrink: 0, width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+                  <div style={{ width: 58, height: 58, borderRadius: '50%', padding: 2, background: '#dc2626' }}>
+                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: theme.navy, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20 }}>📡</div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626' }}>● LIVE</span>
+                </Link>
+              )
+            }
+            // scheduled
+            const diff = s.scheduled_at ? new Date(s.scheduled_at) - now : 0
+            const d = Math.max(0, Math.floor(diff / 86400000))
+            const h = Math.max(0, Math.floor((diff % 86400000) / 3600000))
+            const m = Math.max(0, Math.floor((diff % 3600000) / 60000))
+            const label = diff <= 0 ? 'soon' : d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`
+            return (
+              <Link key={s.id} to={`/live-show/${s.id}`} style={{ flexShrink: 0, width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+                <div style={{ width: 58, height: 58, borderRadius: '50%', padding: 2, background: theme.navy, position: 'relative' }}>
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: theme.tealGradient, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20 }}>⏳</div>
+                  <span style={{ position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)', background: theme.navy, color: '#fff', fontSize: 8, fontWeight: 900, padding: '1px 5px', borderRadius: 8, whiteSpace: 'nowrap' }}>{label}</span>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 800, color: theme.navy }}>Upcoming</span>
+              </Link>
+            )
+          })}
+
           {myStories.map((s) => (
             <button key={s.id} onClick={() => setViewStory(s)} style={{ flexShrink: 0, width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}>
               <div style={{ width: 58, height: 58, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #0d9488, #f59e0b)' }}>
