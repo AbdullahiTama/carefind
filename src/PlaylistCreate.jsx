@@ -5,6 +5,7 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 import DrawingBoard from './DrawingBoard.jsx'
+import { RichTextInput } from './richText.jsx'
 
 const VISUAL_THEMES = {
   teal: 'linear-gradient(135deg, #0d9488, #14b8a6)',
@@ -195,7 +196,9 @@ function PlaylistCreate() {
 
               {/* Text / caption — shown for all except pure media without caption need */}
               {pKind !== 'drawing' && (
-                <textarea value={pText} onChange={(e) => setPText(e.target.value)} placeholder={pKind === 'text' || pKind === 'article' ? 'Write this part…' : pKind === 'visual' ? 'Text for the visual card…' : 'Caption (optional)'} rows={pKind === 'article' ? 6 : 3} style={{ ...inputStyle, marginBottom: 10, resize: 'none' }} />
+                (pKind === 'text' || pKind === 'article')
+                  ? <div style={{ marginBottom: 10 }}><RichTextInput value={pText} onChange={setPText} placeholder="Write this part… (select text to highlight)" rows={pKind === 'article' ? 6 : 3} /></div>
+                  : <textarea value={pText} onChange={(e) => setPText(e.target.value)} placeholder={pKind === 'visual' ? 'Text for the visual card…' : 'Caption (optional)'} rows={3} style={{ ...inputStyle, marginBottom: 10, resize: 'none' }} />
               )}
 
               <button onClick={addPart} disabled={addingPart} style={{ width: '100%', padding: 11, background: theme.navy, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}>
