@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
@@ -19,10 +19,11 @@ const VISUAL_THEMES = {
 function PlaylistCreate() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [step, setStep] = useState('info')
+  const { id: existingId } = useParams()
+  const [step, setStep] = useState(existingId ? 'parts' : 'info')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [playlistId, setPlaylistId] = useState(null)
+  const [playlistId, setPlaylistId] = useState(existingId || null)
   const [parts, setParts] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -37,6 +38,14 @@ function PlaylistCreate() {
   const [drawBlob, setDrawBlob] = useState(null)
   const [showDraw, setShowDraw] = useState(false)
   const [addingPart, setAddingPart] = useState(false)
+
+  useEffect(() => {
+    if (existingId) {
+      supabase.from('playlist_parts').select('id, title, kind, position').eq('playlist_id', existingId).order('position', { ascending: true }).then(({ data }) => {
+        if (data) setParts(data)
+      })
+    }
+  }, [existingId])
 
   const KINDS = [
     ['text', '📝 Text'], ['visual', '🎨 Visual'], ['question', '❓ Question'],
