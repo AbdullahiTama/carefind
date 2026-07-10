@@ -78,7 +78,7 @@ function Search() {
     let resultCount = 0
 
     if (tab === 'products') {
-      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, business_id, list_on_carefind, businesses(name, city, state)')
+      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, business_id, list_on_carefind, businesses(name, city, state)')
       if (q) pq = pq.or(`name.ilike.%${q}%,generic_name.ilike.%${q}%,category.ilike.%${q}%`)
       const { data } = await pq.limit(40)
       let list = (data || []).filter(p => p.list_on_carefind !== false)
@@ -247,8 +247,19 @@ function Search() {
                   {p.generic_name && <p style={{ margin: '0 0 2px 0', fontSize: 11.5, color: theme.textMid, fontStyle: 'italic' }}>{p.generic_name}</p>}
                   <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{p.businesses?.name}{p.businesses?.state ? ` · ${p.businesses.state}` : p.businesses?.city ? ` · ${p.businesses.city}` : ''}</p>
                 </div>
-                {p.price != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+                {p.price != null && (
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>
+                    {p.price_unit && <p style={{ margin: 0, fontSize: 9.5, color: theme.textLight }}>per {p.price_unit}</p>}
+                  </div>
+                )}
               </div>
+              {(p.sale_type || p.min_purchase) && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  {p.sale_type && <span style={{ fontSize: 9.5, fontWeight: 800, color: p.sale_type === 'wholesale' ? '#7c3aed' : theme.tealDeep, background: p.sale_type === 'wholesale' ? '#f3e8ff' : '#ecfdf5', padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>{p.sale_type}</span>}
+                  {p.min_purchase && <span style={{ fontSize: 9.5, fontWeight: 700, color: theme.textMid, background: theme.bg, padding: '2px 8px', borderRadius: 10 }}>Min {p.min_purchase} {p.price_unit || ''}{p.min_purchase > 1 ? 's' : ''}</span>}
+                </div>
+              )}
               {waLink && (
                 <a href={waLink} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, padding: '9px 12px', background: '#25D366', color: '#fff', borderRadius: 10, fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
                   💬 Message on WhatsApp
