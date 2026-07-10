@@ -13,6 +13,8 @@ function ProductUpload({ businesses, onClose, onAdded }) {
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
+  const [genericName, setGenericName] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
   const [description, setDescription] = useState('')
   const [emoji, setEmoji] = useState('💊')
   const [bizId, setBizId] = useState(businesses && businesses[0] ? businesses[0].id : '')
@@ -56,6 +58,8 @@ function ProductUpload({ businesses, onClose, onAdded }) {
     }
     const row = {
       name: name.trim(), price: Number(price), category: category.trim() || null,
+      generic_name: genericName.trim() || null,
+      whatsapp: whatsapp.trim() || null,
       description: description.trim() || null, emoji, list_on_carefind: true,
       image_url: imageUrl,
     }
@@ -93,9 +97,13 @@ function ProductUpload({ businesses, onClose, onAdded }) {
         ) : (
           <div>
             {error && <p style={{ margin: '0 0 8px 0', fontSize: 12.5, color: theme.alert, fontWeight: 600 }}>{error}</p>}
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product name" style={inputStyle} />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product name (brand)" style={inputStyle} />
+            <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Generic name / composition (e.g. Paracetamol 500mg)" style={inputStyle} />
+            <p style={{ margin: '-4px 0 10px 0', fontSize: 10.5, color: theme.textLight }}>Helps people find your product by its active ingredient.</p>
             <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price (₦)" inputMode="numeric" style={inputStyle} />
             <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category (e.g. Skincare, Antibiotics)" style={inputStyle} />
+            <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="WhatsApp number (e.g. 08012345678)" inputMode="tel" style={inputStyle} />
+            <p style={{ margin: '-4px 0 10px 0', fontSize: 10.5, color: theme.textLight }}>Buyers can message you directly on WhatsApp about this product.</p>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" rows={3} style={{ ...inputStyle, resize: 'none' }} />
 
             <p style={{ margin: '0 0 6px 0', fontSize: 11, fontWeight: 800, color: theme.textMid, textTransform: 'uppercase' }}>Icon</p>
