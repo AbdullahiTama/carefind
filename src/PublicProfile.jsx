@@ -4,6 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
+import { notify } from './notify.js'
 
 function PublicProfile() {
   const { id } = useParams()
@@ -49,6 +50,14 @@ function PublicProfile() {
       }
 
       setProfile(profileData)
+      // Notify the profile owner of the view (once per session to avoid spam)
+      if (user && user.id !== id) {
+        const seenKey = `pv_${user.id}_${id}`
+        if (!sessionStorage.getItem(seenKey)) {
+          sessionStorage.setItem(seenKey, '1')
+          notify({ recipientId: id, actorId: user.id, type: 'profile_view', message: 'viewed your profile', link: `/u/${user.id}` })
+        }
+      }
 
       const [postData, followerData, storyData, playlistData] = await Promise.all([
         supabase.from('posts').select('id, content, created_at, post_type, theme, image_url').eq('user_id', id).order('created_at', { ascending: false }).limit(60),
