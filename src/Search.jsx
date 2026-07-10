@@ -78,7 +78,7 @@ function Search() {
     let resultCount = 0
 
     if (tab === 'products') {
-      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, business_id, list_on_carefind, businesses(name, city, state)')
+      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, seller_location, business_id, list_on_carefind, businesses(name, city, state)')
       if (q) pq = pq.or(`name.ilike.%${q}%,generic_name.ilike.%${q}%,category.ilike.%${q}%`)
       const { data } = await pq.limit(40)
       let list = (data || []).filter(p => p.list_on_carefind !== false)
@@ -245,7 +245,13 @@ function Search() {
                 <div style={{ flex: 1 }}>
                   <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{p.name}{p.category && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 10, marginLeft: 6 }}>{p.category}</span>}</p>
                   {p.generic_name && <p style={{ margin: '0 0 2px 0', fontSize: 11.5, color: theme.textMid, fontStyle: 'italic' }}>{p.generic_name}</p>}
-                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{p.businesses?.name}{p.businesses?.state ? ` · ${p.businesses.state}` : p.businesses?.city ? ` · ${p.businesses.city}` : ''}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>
+                    {p.businesses?.name}
+                    {(() => {
+                      const loc = p.seller_location || p.businesses?.state || p.businesses?.city
+                      return loc ? <span>{p.businesses?.name ? ' · ' : ''}📍 {loc}</span> : null
+                    })()}
+                  </p>
                 </div>
                 {p.price != null && (
                   <div style={{ textAlign: 'right' }}>
