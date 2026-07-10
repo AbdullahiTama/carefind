@@ -34,14 +34,16 @@ function Stories() {
       .from('live_shows')
       .select('id, title, host_id, profiles!live_shows_host_id_fkey(full_name, display_name)')
       .eq('status', 'live')
+      .eq('is_platform', true)
       .order('started_at', { ascending: false })
       .limit(1)
     setLiveShow(data && data[0] ? data[0] : null)
-    // Also load the next upcoming scheduled show
+    // Also load the next upcoming scheduled PLATFORM show
     const { data: up } = await supabase
       .from('live_shows')
       .select('id, title, scheduled_at')
       .eq('status', 'scheduled')
+      .eq('is_platform', true)
       .order('scheduled_at', { ascending: true })
       .limit(1)
     setUpcomingShow(up && up[0] ? up[0] : null)
@@ -61,16 +63,12 @@ function Stories() {
     const { data } = await supabase
       .from('stories')
       .select('id, title, body, image_url, bg_color, created_at, user_id, view_count, is_platform, profiles(full_name, display_name, is_verified)')
+      .eq('is_platform', true)
       .gt('expires_at', new Date().toISOString())
 
     const list = data || []
-    // Rank: platform first, then verified users, then by views (desc), then newest
+    // Rank by views (desc), then newest
     list.sort((a, b) => {
-      if (a.is_platform && !b.is_platform) return -1
-      if (!a.is_platform && b.is_platform) return 1
-      const av = a.profiles?.is_verified ? 1 : 0
-      const bv = b.profiles?.is_verified ? 1 : 0
-      if (av !== bv) return bv - av
       if ((b.view_count || 0) !== (a.view_count || 0)) return (b.view_count || 0) - (a.view_count || 0)
       return new Date(b.created_at) - new Date(a.created_at)
     })
@@ -142,7 +140,7 @@ function Stories() {
   }
 
   const hasStories = stories.length > 0
-  if (!hasStories && !canPost && !liveShow && !upcomingShow) return null
+  if (!hasStories && !liveShow && !upcomingShow) return null
 
   function countdownLabel(dateStr) {
     const diff = new Date(dateStr) - Date.now()
@@ -185,8 +183,8 @@ function Stories() {
           </a>
         )}
 
-        {/* Add-to-story button */}
-        {canPost && (
+        {/* Add-to-story button removed from feed — users post stories from their profile now */}
+        {false && canPost && (
           <button
             onClick={() => setComposerOpen(true)}
             style={{ flexShrink: 0, background: 'none', border: 'none', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', width: 70 }}
