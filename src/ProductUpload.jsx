@@ -15,6 +15,9 @@ function ProductUpload({ businesses, onClose, onAdded }) {
   const [category, setCategory] = useState('')
   const [genericName, setGenericName] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [saleType, setSaleType] = useState('retail')
+  const [minPurchase, setMinPurchase] = useState('')
+  const [priceUnit, setPriceUnit] = useState('card')
   const [description, setDescription] = useState('')
   const [emoji, setEmoji] = useState('💊')
   const [bizId, setBizId] = useState(businesses && businesses[0] ? businesses[0].id : '')
@@ -60,6 +63,9 @@ function ProductUpload({ businesses, onClose, onAdded }) {
       name: name.trim(), price: Number(price), category: category.trim() || null,
       generic_name: genericName.trim() || null,
       whatsapp: whatsapp.trim() || null,
+      sale_type: saleType,
+      min_purchase: minPurchase ? Number(minPurchase) : null,
+      price_unit: priceUnit,
       description: description.trim() || null, emoji, list_on_carefind: true,
       image_url: imageUrl,
     }
@@ -101,6 +107,25 @@ function ProductUpload({ businesses, onClose, onAdded }) {
             <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Generic name / composition (e.g. Paracetamol 500mg)" style={inputStyle} />
             <p style={{ margin: '-4px 0 10px 0', fontSize: 10.5, color: theme.textLight }}>Helps people find your product by its active ingredient.</p>
             <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price (₦)" inputMode="numeric" style={inputStyle} />
+
+            {/* Retail or Wholesale */}
+            <p style={{ margin: '0 0 6px 0', fontSize: 11, fontWeight: 800, color: theme.textMid, textTransform: 'uppercase' }}>Sale type</p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              {['retail', 'wholesale'].map(t => (
+                <button key={t} onClick={() => setSaleType(t)} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', fontWeight: 800, fontSize: 13, textTransform: 'capitalize', background: saleType === t ? theme.tealDeep : theme.bg, color: saleType === t ? '#fff' : theme.textMid }}>{t}</button>
+              ))}
+            </div>
+
+            {/* Price per unit */}
+            <p style={{ margin: '0 0 6px 0', fontSize: 11, fontWeight: 800, color: theme.textMid, textTransform: 'uppercase' }}>Price is per</p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {['card', 'box', 'roll', 'carton', 'bottle', 'sachet', 'pack', 'piece'].map(u => (
+                <button key={u} onClick={() => setPriceUnit(u)} style={{ padding: '7px 12px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 12, textTransform: 'capitalize', background: priceUnit === u ? theme.tealDeep : theme.bg, color: priceUnit === u ? '#fff' : theme.textMid }}>{u}</button>
+              ))}
+            </div>
+
+            {/* Minimum purchase */}
+            <input value={minPurchase} onChange={(e) => setMinPurchase(e.target.value)} placeholder={`Minimum purchase (e.g. 5 ${priceUnit}s)`} inputMode="numeric" style={inputStyle} />
             <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category (e.g. Skincare, Antibiotics)" style={inputStyle} />
             <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="WhatsApp number (e.g. 08012345678)" inputMode="tel" style={inputStyle} />
             <p style={{ margin: '-4px 0 10px 0', fontSize: 10.5, color: theme.textLight }}>Buyers can message you directly on WhatsApp about this product.</p>
