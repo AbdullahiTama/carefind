@@ -10,6 +10,7 @@ import VisualCard from './VisualCard.jsx'
 import ArticleEditor from './ArticleEditor.jsx'
 import GoLive from './GoLive.jsx'
 import UserGoLive from './UserGoLive.jsx'
+import { notify } from './notify.js'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
 import { useRef } from 'react'
@@ -398,6 +399,9 @@ function Feed() {
       const tempReaction = { id: `temp_${Date.now()}`, post_id: postId, user_id: user.id, reaction_type: 'like' }
       setReactions((prev) => [...prev, tempReaction])
       supabase.from('post_reactions').insert({ post_id: postId, user_id: user.id, reaction_type: 'like' })
+      // Notify the post author
+      const post = posts.find((p) => p.id === postId)
+      if (post) notify({ recipientId: post.user_id, actorId: user.id, type: 'like', message: 'liked your post', link: '/', postId })
     }
   }
 
@@ -427,6 +431,9 @@ function Feed() {
 
     if (!error) {
       setCommentDrafts({ ...commentDrafts, [postId]: '' })
+      // Notify the post author
+      const post = posts.find((p) => p.id === postId)
+      if (post) notify({ recipientId: post.user_id, actorId: user.id, type: 'comment', message: 'commented on your post', link: '/', postId })
       const { data } = await supabase
         .from('post_comments')
         .select('id, content, created_at, user_id')
@@ -449,6 +456,7 @@ function Feed() {
       await supabase.from('follows').delete().eq('id', existing.id)
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: authorId })
+      notify({ recipientId: authorId, actorId: user.id, type: 'follow', message: 'started following you', link: `/u/${user.id}` })
     }
     loadFeed()
   }
@@ -669,6 +677,12 @@ function Feed() {
               </button>
             ))}
           </div>
+
+          {canGoLive && (
+            <Link to="/playlist/create" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 13px', borderRadius: 12, background: theme.navy, color: '#fff', fontSize: 12.5, fontWeight: 800, textDecoration: 'none', marginBottom: 12 }}>
+              🎬 Create a Playlist (series)
+            </Link>
+          )}
 
           {postType === 'visual' && (
             <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
