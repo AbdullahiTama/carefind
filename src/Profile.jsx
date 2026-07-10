@@ -5,6 +5,7 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 import { renderRichText, stripMarkers } from './richText.jsx'
+import ProductUpload from './ProductUpload.jsx'
 import { getActiveBusiness, setActiveBusiness, clearActiveBusiness } from './lib/activeIdentity'
 
 function Profile() {
@@ -42,6 +43,7 @@ function Profile() {
   const [sImage, setSImage] = useState(null)
   const [postingStory, setPostingStory] = useState(false)
   const [viewStory, setViewStory] = useState(null)
+  const [productUpload, setProductUpload] = useState(false)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -355,6 +357,14 @@ function Profile() {
           </div>
         </Link>
 
+        {/* Sell on MedMarket (verified only) */}
+        {profile?.is_verified && (
+          <button onClick={() => setProductUpload(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 14px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, marginBottom: 16, cursor: 'pointer' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 800 }}>🛒 Add a product to MedMarket</span>
+            <span>›</span>
+          </button>
+        )}
+
         {/* My Businesses + Post-as switcher */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -548,6 +558,10 @@ function Profile() {
           {viewStory.body && <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16, textAlign: 'center', margin: 0, lineHeight: 1.5 }}>{viewStory.body}</p>}
           <button onClick={() => setViewStory(null)} style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', borderRadius: '50%', width: 34, height: 34, fontSize: 18 }}>✕</button>
         </div>
+      )}
+
+      {productUpload && (
+        <ProductUpload businesses={ownedBusinesses} onClose={() => setProductUpload(false)} onAdded={() => {}} />
       )}
 
       <BottomNav />
