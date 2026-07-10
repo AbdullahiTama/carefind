@@ -22,6 +22,7 @@ function ProductUpload({ businesses, onClose, onAdded }) {
   const [emoji, setEmoji] = useState('💊')
   const [bizId, setBizId] = useState(businesses && businesses[0] ? businesses[0].id : '')
   const [image, setImage] = useState(null)
+  const [sellerLocation, setSellerLocation] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -41,6 +42,9 @@ function ProductUpload({ businesses, onClose, onAdded }) {
     // Check subscription
     const { data: sub } = await supabase.from('product_subscriptions').select('id, active, expires_at').eq('user_id', user.id).eq('active', true).gt('expires_at', new Date().toISOString()).maybeSingle()
     setSubscribed(!!sub)
+    // Pull seller's location from their profile
+    const { data: prof } = await supabase.from('profiles').select('location').eq('id', user.id).maybeSingle()
+    if (prof?.location) setSellerLocation(prof.location)
   }
 
   const atLimit = count !== null && count >= FREE_LIMIT && !subscribed
@@ -66,6 +70,7 @@ function ProductUpload({ businesses, onClose, onAdded }) {
       sale_type: saleType,
       min_purchase: minPurchase ? Number(minPurchase) : null,
       price_unit: priceUnit,
+      seller_location: sellerLocation || null,
       description: description.trim() || null, emoji, list_on_carefind: true,
       image_url: imageUrl,
     }
@@ -106,6 +111,9 @@ function ProductUpload({ businesses, onClose, onAdded }) {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product name (brand)" style={inputStyle} />
             <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Generic name / composition (e.g. Paracetamol 500mg)" style={inputStyle} />
             <p style={{ margin: '-4px 0 10px 0', fontSize: 10.5, color: theme.textLight }}>Helps people find your product by its active ingredient.</p>
+            {sellerLocation
+              ? <p style={{ margin: '0 0 10px 0', fontSize: 11.5, color: theme.tealDeep, fontWeight: 600 }}>📍 Listed in {sellerLocation} (from your profile)</p>
+              : <p style={{ margin: '0 0 10px 0', fontSize: 11, color: theme.warning }}>⚠️ Add a location to your profile so buyers know where you are.</p>}
             <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price (₦)" inputMode="numeric" style={inputStyle} />
 
             {/* Retail or Wholesale */}
