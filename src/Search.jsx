@@ -78,7 +78,7 @@ function Search() {
     let resultCount = 0
 
     if (tab === 'products') {
-      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, seller_location, business_id, list_on_carefind, businesses(name, city, state)')
+      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, seller_location, business_id, list_on_carefind, businesses(name, city, state, whatsapp)')
       if (q) pq = pq.or(`name.ilike.%${q}%,generic_name.ilike.%${q}%,category.ilike.%${q}%`)
       const { data } = await pq.limit(40)
       let list = (data || []).filter(p => p.list_on_carefind !== false)
@@ -228,10 +228,11 @@ function Search() {
         )}
 
         {products.map((p, idx) => {
-          // Format WhatsApp number to wa.me link (Nigeria: 080... -> 23480...)
+          // WhatsApp: product's own number, else the business's number (CareHub inventory)
+          const rawWa = p.whatsapp || p.businesses?.whatsapp
           let waLink = null
-          if (p.whatsapp) {
-            let num = p.whatsapp.replace(/\D/g, '')
+          if (rawWa) {
+            let num = rawWa.replace(/\D/g, '')
             if (num.startsWith('0')) num = '234' + num.slice(1)
             else if (!num.startsWith('234')) num = '234' + num
             waLink = `https://wa.me/${num}?text=${encodeURIComponent(`Hi, I'm interested in "${p.name}" on CareFind.`)}`
@@ -245,13 +246,23 @@ function Search() {
                 <div style={{ flex: 1 }}>
                   <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{p.name}{p.category && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 10, marginLeft: 6 }}>{p.category}</span>}</p>
                   {p.generic_name && <p style={{ margin: '0 0 2px 0', fontSize: 11.5, color: theme.textMid, fontStyle: 'italic' }}>{p.generic_name}</p>}
-                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>
-                    {p.businesses?.name}
-                    {(() => {
-                      const loc = p.seller_location || p.businesses?.state || p.businesses?.city
-                      return loc ? <span>{p.businesses?.name ? ' · ' : ''}📍 {loc}</span> : null
-                    })()}
-                  </p>
+                  {p.business_id ? (
+                    <Link to={`/business/${p.business_id}`} style={{ margin: 0, fontSize: 12, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}>
+                      {p.businesses?.name || 'View business'}
+                      {(() => {
+                        const loc = p.seller_location || p.businesses?.state || p.businesses?.city
+                        return loc ? <span style={{ color: theme.textLight, fontWeight: 400 }}> · 📍 {loc}</span> : null
+                      })()}
+                      {' ›'}
+                    </Link>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>
+                      {(() => {
+                        const loc = p.seller_location
+                        return loc ? <span>📍 {loc}</span> : null
+                      })()}
+                    </p>
+                  )}
                 </div>
                 {p.price != null && (
                   <div style={{ textAlign: 'right' }}>
