@@ -78,7 +78,7 @@ function Search() {
     let resultCount = 0
 
     if (tab === 'products') {
-      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, business_id, list_on_carefind, businesses(name, city, state)')
+      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, business_id, list_on_carefind, businesses(name, city, state)')
       if (q) pq = pq.or(`name.ilike.%${q}%,generic_name.ilike.%${q}%,category.ilike.%${q}%`)
       const { data } = await pq.limit(40)
       let list = (data || []).filter(p => p.list_on_carefind !== false)
@@ -227,16 +227,36 @@ function Search() {
           <EmptyState label="No professionals found" hint="Try another specialty or state." />
         )}
 
-        {products.map((p, idx) => (
-          <Link key={p.id} className="mm-card" to={`/business/${p.business_id}`} style={{ animationDelay: `${Math.min(idx * 0.04, 0.4)}s`, textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg, alignItems: 'center' }}>
-            <div style={{ fontSize: 26 }}>{p.emoji || '💊'}</div>
-            <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{p.name}{p.category && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 10, marginLeft: 6 }}>{p.category}</span>}</p>
-              <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{p.businesses?.name}{p.businesses?.state ? ` · ${p.businesses.state}` : p.businesses?.city ? ` · ${p.businesses.city}` : ''}</p>
+        {products.map((p, idx) => {
+          // Format WhatsApp number to wa.me link (Nigeria: 080... -> 23480...)
+          let waLink = null
+          if (p.whatsapp) {
+            let num = p.whatsapp.replace(/\D/g, '')
+            if (num.startsWith('0')) num = '234' + num.slice(1)
+            else if (!num.startsWith('234')) num = '234' + num
+            waLink = `https://wa.me/${num}?text=${encodeURIComponent(`Hi, I'm interested in "${p.name}" on CareFind.`)}`
+          }
+          return (
+            <div key={p.id} className="mm-card" style={{ animationDelay: `${Math.min(idx * 0.04, 0.4)}s`, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                {p.image_url
+                  ? <div style={{ width: 46, height: 46, borderRadius: 10, background: `url(${p.image_url}) center/cover`, flexShrink: 0 }} />
+                  : <div style={{ fontSize: 26 }}>{p.emoji || '💊'}</div>}
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{p.name}{p.category && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '1px 6px', borderRadius: 10, marginLeft: 6 }}>{p.category}</span>}</p>
+                  {p.generic_name && <p style={{ margin: '0 0 2px 0', fontSize: 11.5, color: theme.textMid, fontStyle: 'italic' }}>{p.generic_name}</p>}
+                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{p.businesses?.name}{p.businesses?.state ? ` · ${p.businesses.state}` : p.businesses?.city ? ` · ${p.businesses.city}` : ''}</p>
+                </div>
+                {p.price != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+              </div>
+              {waLink && (
+                <a href={waLink} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, padding: '9px 12px', background: '#25D366', color: '#fff', borderRadius: 10, fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                  💬 Message on WhatsApp
+                </a>
+              )}
             </div>
-            {p.price != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
-          </Link>
-        ))}
+          )
+        })}
 
         {businesses.map((b, idx) => (
           <Link key={b.id} className="mm-card" to={`/business/${b.id}`} style={{ animationDelay: `${Math.min(idx * 0.04, 0.4)}s`, textDecoration: 'none', color: 'inherit', display: 'flex', gap: 12, padding: 12, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 8, background: theme.cardBg }}>
