@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
@@ -8,6 +8,7 @@ import { notify } from './notify.js'
 
 function PublicProfile() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [posts, setPosts] = useState([])
@@ -22,6 +23,11 @@ function PublicProfile() {
   const [progress, setProgress] = useState(0)
   const [activeTab, setActiveTab] = useState('posts')
   const [playlists, setPlaylists] = useState([])
+  const [userReviews, setUserReviews] = useState([])
+  const [reviewers, setReviewers] = useState({})
+  const [myRating, setMyRating] = useState(5)
+  const [myComment, setMyComment] = useState('')
+  const [postingReview, setPostingReview] = useState(false)
   const [openPost, setOpenPost] = useState(null)
   const timerRef = useRef(null)
   const STORY_DURATION = 6000
@@ -72,6 +78,8 @@ function PublicProfile() {
       setUserStories(storyData.data || [])
       setPlaylists(playlistData.data || [])
 
+      await loadUserReviews()
+
       if (user) {
         const { data: followData } = await supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
         setIsFollowing(!!followData)
@@ -81,6 +89,46 @@ function PublicProfile() {
     }
     load()
   }, [id, user])
+
+  async function loadUserReviews() {
+    const { data } = await supabase
+      .from('user_reviews')
+      .select('id, rating, comment, created_at, user_id')
+      .eq('subject_id', id)
+      .order('created_at', { ascending: false })
+    const rv = data || []
+    setUserReviews(rv)
+
+    const userIds = [...new Set(rv.map((r) => r.user_id).filter(Boolean))]
+    if (userIds.length) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, full_name, display_name, is_verified')
+        .in('id', userIds)
+      const map = {}
+      ;(profs || []).forEach((pr) => { map[pr.id] = pr })
+      setReviewers(map)
+    } else {
+      setReviewers({})
+    }
+  }
+
+  async function submitUserReview(e) {
+    e.preventDefault()
+    if (!user) { navigate('/login'); return }
+    setPostingReview(true)
+    const { error } = await supabase.from('user_reviews').insert({
+      subject_id: id,
+      user_id: user.id,
+      rating: myRating,
+      comment: myComment.trim() || null,
+    })
+    setPostingReview(false)
+    if (error) { alert('Could not post review: ' + error.message); return }
+    setMyRating(5)
+    setMyComment('')
+    loadUserReviews()
+  }
 
   // Story viewer progress
   useEffect(() => {
@@ -235,11 +283,18 @@ function PublicProfile() {
             <p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>{followerCount}</p>
             <p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>Followers</p>
           </div>
+          <button onClick={() => setActiveTab('reviews')} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }}>
+            <p style={{ margin: 0, fontWeight: 900, fontSize: 16, color: theme.navy }}>
+              {userReviews.length ? (userReviews.reduce((s, r) => s + (r.rating || 0), 0) / userReviews.length).toFixed(1) : '—'}
+              <span style={{ color: theme.warning, fontSize: 13 }}> ★</span>
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: theme.textLight, fontWeight: 600 }}>{userReviews.length} review{userReviews.length !== 1 ? 's' : ''}</p>
+          </button>
         </div>
 
         {/* Content tabs */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
-          {[['posts', '📝 Posts'], ['reposts', '🔁 Reposts'], ['playlists', '🎬 Playlists']].map(([key, label]) => (
+          {[['posts', '📝 Posts'], ['reposts', '🔁 Reposts'], ['playlists', '🎬 Playlists'], ['reviews', '⭐ Reviews']].map(([key, label]) => (
             <button key={key} onClick={() => setActiveTab(key)} style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', borderBottom: activeTab === key ? `2px solid ${theme.tealDeep}` : '2px solid transparent', color: activeTab === key ? theme.navy : theme.textLight, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
               {label}
             </button>
@@ -262,8 +317,84 @@ function PublicProfile() {
               ))
         )}
 
+        {/* Reviews tab — this person's aggregated review profile */}
+        {activeTab === 'reviews' && (() => {
+          const total = userReviews.length
+          const avg = total ? (userReviews.reduce((s, r) => s + (r.rating || 0), 0) / total) : 0
+          const breakdown = [5, 4, 3, 2, 1].map((n) => ({
+            star: n,
+            count: userReviews.filter((r) => r.rating === n).length,
+            pct: total ? Math.round((userReviews.filter((r) => r.rating === n).length / total) * 100) : 0,
+          }))
+          return (
+            <div>
+              {total > 0 && (
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: theme.navy }}>{avg.toFixed(1)}</span>
+                    <div>
+                      <p style={{ margin: 0, color: theme.warning, fontSize: 14 }}>{'★'.repeat(Math.round(avg))}{'☆'.repeat(5 - Math.round(avg))}</p>
+                      <p style={{ margin: 0, fontSize: 11.5, color: theme.textLight }}>{total} review{total !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                  {breakdown.map((b) => (
+                    <div key={b.star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <span style={{ fontSize: 11.5, color: theme.textMid, width: 12 }}>{b.star}</span>
+                      <span style={{ fontSize: 11, color: theme.warning }}>★</span>
+                      <div style={{ flex: 1, height: 6, background: theme.bg, borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${b.pct}%`, height: '100%', background: b.star >= 4 ? theme.success : b.star === 3 ? theme.warning : theme.alert, borderRadius: 4 }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: theme.textLight, width: 24 }}>{b.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {user && user.id !== id && (
+                <form onSubmit={submitUserReview} style={{ border: `1px dashed ${theme.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 13, fontWeight: 800, color: theme.navy }}>Leave a review</p>
+                  <div style={{ marginBottom: 8 }}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button type="button" key={n} onClick={() => setMyRating(n)} style={{ background: 'none', border: 'none', fontSize: 22, color: n <= myRating ? theme.warning : '#ddd', padding: 0 }}>★</button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={myComment}
+                    onChange={(e) => setMyComment(e.target.value)}
+                    placeholder="Share your experience with this person…"
+                    rows={3}
+                    style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 12, fontFamily: 'inherit', boxSizing: 'border-box', resize: 'none' }}
+                  />
+                  <button type="submit" disabled={postingReview} style={{ marginTop: 10, width: '100%', padding: 11, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 13 }}>
+                    {postingReview ? 'Posting…' : 'Post Review'}
+                  </button>
+                </form>
+              )}
+
+              {total === 0 && <p style={{ textAlign: 'center', fontSize: 13, color: theme.textLight, padding: '20px 0' }}>No reviews yet.</p>}
+
+              {userReviews.map((r) => {
+                const who = reviewers[r.user_id]
+                const whoName = who?.full_name || who?.display_name || 'CareFind user'
+                return (
+                  <div key={r.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 13, background: theme.cardBg, marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Link to={`/u/${r.user_id}`} style={{ fontSize: 13, fontWeight: 800, color: theme.navy, textDecoration: 'none' }}>
+                        {whoName}{who?.is_verified && <span style={{ color: theme.tealDeep }}> ✓</span>}
+                      </Link>
+                      <span style={{ color: theme.warning, fontSize: 13 }}>{'★'.repeat(r.rating || 0)}{'☆'.repeat(5 - (r.rating || 0))}</span>
+                    </div>
+                    {r.comment && <p style={{ margin: 0, fontSize: 13.5, color: theme.textMid, lineHeight: 1.5 }}>{r.comment}</p>}
+                    <p style={{ margin: '4px 0 0 0', fontSize: 10.5, color: theme.textLight }}>{new Date(r.created_at).toLocaleDateString()}</p>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+
         {/* Posts / Reposts grid */}
-        {activeTab !== 'playlists' && (() => {
+        {activeTab !== 'playlists' && activeTab !== 'reviews' && (() => {
           const list = activeTab === 'reposts'
             ? posts.filter(p => (p.content || '').startsWith('🔁'))
             : posts.filter(p => !(p.content || '').startsWith('🔁'))
