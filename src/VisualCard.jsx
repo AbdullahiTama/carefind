@@ -30,7 +30,7 @@ export const CARD_TEMPLATES = {
   },
 }
 
-function VisualCard({ templateKey = 'teal-depth', content = '', preview = false, hasVoice = false }) {
+function VisualCard({ templateKey = 'teal-depth', content = '', preview = false, hasVoice = false, imageUrl = null, videoUrl = null, username = '' }) {
   const t = CARD_TEMPLATES[templateKey] || CARD_TEMPLATES['teal-depth']
   const text = String(content || '')
   const empty = !text.trim()
@@ -45,7 +45,7 @@ function VisualCard({ templateKey = 'teal-depth', content = '', preview = false,
         position: 'relative',
         width: '100%',
         aspectRatio: '1 / 1',
-        background: t.background,
+        background: imageUrl ? `#0b1220 url(${imageUrl}) center/cover` : t.background,
         borderRadius: 16,
         overflow: 'hidden',
         display: 'flex',
@@ -55,8 +55,29 @@ function VisualCard({ templateKey = 'teal-depth', content = '', preview = false,
         boxSizing: 'border-box',
       }}
     >
+      {!imageUrl && videoUrl && (
+        <video
+          src={videoUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      )}
+
+      {(imageUrl || videoUrl) && (
+        <div
+          style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.62))',
+          }}
+        />
+      )}
+
       <p
         style={{
+          position: 'relative',
           margin: 0,
           color: empty ? 'rgba(255,255,255,0.45)' : t.color,
           fontSize: empty ? 20 : fontSize,
@@ -129,17 +150,25 @@ function VisualCard({ templateKey = 'teal-depth', content = '', preview = false,
         >
           C
         </div>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 800,
-            letterSpacing: '0.16em',
-            color: 'rgba(255,255,255,0.7)',
-            textTransform: 'uppercase',
-          }}
-        >
-          CareFind
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: '0.16em',
+              color: 'rgba(255,255,255,0.7)',
+              textTransform: 'uppercase',
+              lineHeight: 1.1,
+            }}
+          >
+            CareFind
+          </span>
+          {username && (
+            <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.95)', lineHeight: 1.1 }}>
+              @{String(username).replace(/^@/, '')}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
