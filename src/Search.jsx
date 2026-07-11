@@ -143,7 +143,7 @@ function Search() {
         </p>
         <form onSubmit={runSearch}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search medication, pharmacy, doctor…" style={{ flex: 1, padding: 13, fontSize: 14, border: 'none', borderRadius: 13, boxSizing: 'border-box' }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search medication, facility, doctor…" style={{ flex: 1, padding: 13, fontSize: 14, border: 'none', borderRadius: 13, boxSizing: 'border-box' }} />
             <button type="submit" style={{ padding: '0 18px', background: '#fff', color: theme.tealDeep, border: 'none', borderRadius: 13, fontWeight: 800, fontSize: 14 }}>Go</button>
           </div>
         </form>
@@ -152,7 +152,7 @@ function Search() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '14px 16px 6px' }}>
         {[
           { key: 'products', label: 'Products', icon: '💊' },
-          { key: 'businesses', label: 'Pharmacies', icon: '🏥' },
+          { key: 'businesses', label: 'Health Facilities', icon: '🏥' },
           { key: 'professionals', label: 'Professionals', icon: '🩺' },
         ].map((c) => (
           <button key={c.key} onClick={() => setTab(c.key)} style={{
@@ -221,7 +221,7 @@ function Search() {
           <EmptyState label="No products found" hint="Try another name or state." />
         )}
         {!loading && tab === 'businesses' && businesses.length === 0 && (
-          <EmptyState label="No pharmacies found" hint="Try another state." />
+          <EmptyState label="No health facilities found" hint="Try another state." />
         )}
         {!loading && tab === 'professionals' && professionals.length === 0 && (
           <EmptyState label="No professionals found" hint="Try another specialty or state." />
@@ -297,6 +297,7 @@ function Search() {
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{b.name}</p>
               <p style={{ margin: 0, fontSize: 12, color: theme.textLight, textTransform: 'capitalize' }}>{b.business_type} · {b.city}{b.state ? `, ${b.state}` : ''}</p>
+              <p style={{ margin: '3px 0 0 0', fontSize: 10.5, color: theme.tealDeep, fontWeight: 700 }}>⭐ See profile & reviews ›</p>
             </div>
           </Link>
         ))}
