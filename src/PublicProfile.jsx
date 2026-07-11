@@ -5,6 +5,7 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 import { notify } from './notify.js'
+import { previewText, renderRichText } from './richText.jsx'
 import { subscribe, checkAccess, cancelAutoRenew, coinsToNaira } from './subscriptions.js'
 
 function PublicProfile() {
@@ -288,6 +289,19 @@ function PublicProfile() {
                 {isFollowing ? 'Following' : '+ Follow'}
               </button>
 
+              {!(profile?.subscription_price > 0) && profile?.is_verified && (
+                <span
+                  style={{
+                    background: theme.bg, color: theme.textLight,
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 20, padding: '7px 14px', fontSize: 12, fontWeight: 700,
+                    cursor: 'not-allowed', opacity: 0.75,
+                  }}
+                >
+                  🔒 Not accepting subscriptions
+                </span>
+              )}
+
               {profile?.subscription_price > 0 && (
                 subActive ? (
                   <button
@@ -480,7 +494,7 @@ function PublicProfile() {
                     )}
                     <div style={{ padding: '8px 10px', flex: 1, overflow: 'hidden' }}>
                       {post.post_type && post.post_type !== 'text' && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{typeIcon[post.post_type]} {post.post_type}</span>}
-                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(post.content || '').replace(/^🔁\s*/, '')}</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{previewText((post.content || '').replace(/^🔁\s*/, ''))}</p>
                     </div>
                   </div>
                 </button>
@@ -503,7 +517,7 @@ function PublicProfile() {
                 <p style={{ color: '#fff', fontSize: 16, fontWeight: 800, textAlign: 'center', margin: 0, whiteSpace: 'pre-wrap' }}>{openPost.content}</p>
               </div>
             )}
-            {openPost.post_type !== 'visual' && <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{(openPost.content || '').replace(/^🔁\s*/, '')}</p>}
+            {openPost.post_type !== 'visual' && <p style={{ margin: 0, fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{renderRichText(previewText((openPost.content || '').replace(/^🔁\s*/, '')))}</p>}
             <p style={{ margin: '12px 0 0 0', fontSize: 11, color: theme.textLight }}>{openPost.created_at ? timeAgo(openPost.created_at) : ''}</p>
           </div>
         </div>
