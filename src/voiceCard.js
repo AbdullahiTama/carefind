@@ -63,7 +63,7 @@ function drawWrappedText(ctx, text, color) {
 }
 
 // The CareFind logo, bottom-left — the whole point of the export.
-function drawLogo(ctx) {
+function drawLogo(ctx, username) {
   const s = 64
   const x = 70
   const y = SIZE - 70 - s
@@ -81,12 +81,20 @@ function drawLogo(ctx) {
   ctx.textBaseline = 'middle'
   ctx.fillText('C', x + s / 2, y + s / 2 + 2)
 
-  ctx.fillStyle = 'rgba(255,255,255,0.72)'
-  ctx.font = '700 30px system-ui, -apple-system, Helvetica, sans-serif'
   ctx.textAlign = 'left'
   ctx.letterSpacing = '4px'
-  ctx.fillText('CAREFIND', x + s + 20, y + s / 2 + 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.72)'
+  ctx.font = '700 30px system-ui, -apple-system, Helvetica, sans-serif'
+  ctx.fillText('CAREFIND', x + s + 20, y + s / 2 - (username ? 14 : 0) + 2)
   ctx.letterSpacing = '0px'
+
+  // The creator's handle travels with the card, like TikTok
+  if (username) {
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'
+    ctx.font = '800 26px system-ui, -apple-system, Helvetica, sans-serif'
+    ctx.fillText(`@${String(username).replace(/^@/, '')}`, x + s + 20, y + s / 2 + 22)
+  }
+  ctx.textAlign = 'center'
 }
 
 // Optional: a soft sound-wave hint so a silent screenshot still reads as "has voice"
@@ -109,19 +117,66 @@ function drawWave(ctx, color, phase = 0) {
   }
 }
 
-export function drawCard(canvas, { text, theme = 'teal-depth', hasVoice = false, phase = 0 }) {
+export function drawCard(canvas, { text, theme = 'teal-depth', hasVoice = false, phase = 0, image = null, video = null, username = '' }) {
   const t = CARD_THEMES[theme] || CARD_THEMES['teal-depth']
   const ctx = canvas.getContext('2d')
 
-  const g = ctx.createLinearGradient(0, 0, SIZE, SIZE)
-  g.addColorStop(0, t.from)
-  g.addColorStop(1, t.to)
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, SIZE, SIZE)
+  const backdrop = video || image
+  const bw = video ? video.videoWidth : (image ? image.width : 0)
+  const bh = video ? video.videoHeight : (image ? image.height : 0)
 
-  drawWrappedText(ctx, text, t.text)
-  if (hasVoice) drawWave(ctx, 'rgba(255,255,255,0.35)', phase)
-  drawLogo(ctx)
+  if (backdrop && bw && bh) {
+    // Cover-fit the photo/drawing/video, then darken it so text and logo stay readable
+    const scale = Math.max(SIZE / bw, SIZE / bh)
+    const w = bw * scale
+    const h = bh * scale
+    ctx.drawImage(backdrop, (SIZE - w) / 2, (SIZE - h) / 2, w, h)
+
+    const shade = ctx.createLinearGradient(0, 0, 0, SIZE)
+    shade.addColorStop(0, 'rgba(0,0,0,0.35)')
+    shade.addColorStop(0.55, 'rgba(0,0,0,0.30)')
+    shade.addColorStop(1, 'rgba(0,0,0,0.62)')
+    ctx.fillStyle = shade
+    ctx.fillRect(0, 0, SIZE, SIZE)
+  } else {
+    const g = ctx.createLinearGradient(0, 0, SIZE, SIZE)
+    g.addColorStop(0, t.from)
+    g.addColorStop(1, t.to)
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, SIZE, SIZE)
+  }
+
+  drawWrappedText(ctx, text, '#FFFFFF')
+  if (hasVoice) drawWave(ctx, 'rgba(255,255,255,0.4)', phase)
+  drawLogo(ctx, username)
+}
+
+// Load a video so we can paint its frames onto the canvas
+export function loadVideo(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return }
+    const v = document.createElement('video')
+    v.crossOrigin = 'anonymous'
+    v.muted = true          // the voice is the audio — the clip is a silent backdrop
+    v.loop = true
+    v.playsInline = true
+    v.preload = 'auto'
+    v.onloadeddata = () => resolve(v)
+    v.onerror = () => resolve(null)  // fall back to the gradient rather than fail
+    v.src = url
+  })
+}
+
+// Load a Supabase image so we can paint it onto the canvas without tainting it
+export function loadImage(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return }
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null) // fall back to the gradient rather than fail
+    img.src = url
+  })
 }
 
 function newCanvas() {
@@ -134,7 +189,19 @@ function newCanvas() {
 // ---- PNG export (always works) ----
 export async function exportImage(opts) {
   const canvas = newCanvas()
-  drawCard(canvas, { ...opts, phase: 0 })
+  const image = await loadImage(opts.imageUrl)
+  let video = null
+  if (!image && opts.videoUrl) {
+    video = await loadVideo(opts.videoUrl)
+    if (video) {
+      // Nudge to a frame with something on it, rather than a black first frame
+      try {
+        video.currentTime = Math.min(0.4, (video.duration || 1) / 3)
+        await new Promise((r) => { video.onseeked = r; setTimeout(r, 600) })
+      } catch (e) { /* use whatever frame we have */ }
+    }
+  }
+  drawCard(canvas, { ...opts, image, video, phase: 0 })
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png')
   })
@@ -169,14 +236,17 @@ function pickMimeType() {
 // ---- Video export (card + voice) ----
 // Plays the voice through an audio graph, records the animated canvas alongside it.
 // Resolves { blob, ext } or throws if the browser can't do it.
-export async function exportVideo({ text, theme, audioUrl, onProgress }) {
+export async function exportVideo({ text, theme, audioUrl, imageUrl, videoUrl, username, onProgress }) {
   const mimeType = pickMimeType()
   if (!mimeType || typeof MediaRecorder === 'undefined') {
     throw new Error('This browser cannot create videos')
   }
 
   const canvas = newCanvas()
-  drawCard(canvas, { text, theme, hasVoice: true, phase: 0 })
+  const image = await loadImage(imageUrl)
+  const video = image ? null : await loadVideo(videoUrl)
+  if (video) { try { await video.play() } catch (e) { /* keep going; frames may still draw */ } }
+  drawCard(canvas, { text, theme, hasVoice: true, phase: 0, image, video, username })
 
   const canvasStream = canvas.captureStream(30)
 
@@ -211,7 +281,7 @@ export async function exportVideo({ text, theme, audioUrl, onProgress }) {
 
   const animate = () => {
     const elapsed = (performance.now() - startedAt) / 1000
-    drawCard(canvas, { text, theme, hasVoice: true, phase: elapsed * 6 })
+    drawCard(canvas, { text, theme, hasVoice: true, phase: elapsed * 6, image, video, username })
     if (onProgress) onProgress(Math.min(1, elapsed / duration))
     if (elapsed < duration) raf = requestAnimationFrame(animate)
   }
@@ -226,6 +296,7 @@ export async function exportVideo({ text, theme, audioUrl, onProgress }) {
     recorder.onstop = () => {
       cancelAnimationFrame(raf)
       actx.close()
+      if (video) { try { video.pause() } catch (e) {} }
       const blob = new Blob(chunks, { type: mimeType })
       const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
       resolve({ blob, ext })
