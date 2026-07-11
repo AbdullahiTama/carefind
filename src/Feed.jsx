@@ -918,15 +918,39 @@ function Feed() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: post.post_type === 'visual' ? '12px 14px 0 14px' : 0, marginBottom: post.post_type === 'visual' ? 0 : 8 }}>
               <Link to={`/u/${post.user_id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                <div
-                  style={{
-                    width: 38, height: 38, borderRadius: '50%',
-                    background: theme.tealGradient,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0,
-                  }}
-                >
-                  {(profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase()}
+                <div style={{ position: 'relative', flexShrink: 0, marginBottom: user && post.user_id !== user.id ? 4 : 0 }}>
+                  <div
+                    style={{
+                      width: 38, height: 38, borderRadius: '50%',
+                      background: theme.tealGradient,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 14, fontWeight: 800,
+                    }}
+                  >
+                    {(profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase()}
+                  </div>
+
+                  {/* Follow badge sitting on the avatar (TikTok-style) */}
+                  {user && post.user_id !== user.id && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFollow(post.user_id) }}
+                      aria-label={isFollowing(post.user_id) ? 'Following' : 'Follow'}
+                      style={{
+                        position: 'absolute', bottom: -7, left: '50%', transform: 'translateX(-50%)',
+                        width: 22, height: 22, borderRadius: '50%', padding: 0, lineHeight: 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer',
+                        background: isFollowing(post.user_id) ? '#fff' : '#f97316',
+                        border: isFollowing(post.user_id) ? `2px solid ${theme.tealDeep}` : '2px solid #fff',
+                        color: isFollowing(post.user_id) ? theme.tealDeep : '#fff',
+                        fontSize: isFollowing(post.user_id) ? 11 : 16,
+                        fontWeight: 900,
+                        boxShadow: isFollowing(post.user_id) ? 'none' : '0 2px 6px rgba(249,115,22,0.55)',
+                      }}
+                    >
+                      {isFollowing(post.user_id) ? '✓' : '+'}
+                    </button>
+                  )}
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -964,28 +988,7 @@ function Feed() {
                     {post.post_type}
                   </span>
                 )}
-                {user && post.user_id !== user.id && (
-                  <button
-                    onClick={() => toggleFollow(post.user_id)}
-                    aria-label={isFollowing(post.user_id) ? 'Following' : 'Follow'}
-                    style={{
-                      width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: 'pointer', padding: 0, lineHeight: 1,
-                      transition: 'transform 0.12s ease',
-                      background: isFollowing(post.user_id) ? '#fff' : theme.tealGradient,
-                      border: isFollowing(post.user_id) ? `2px solid ${theme.tealDeep}` : 'none',
-                      color: isFollowing(post.user_id) ? theme.tealDeep : '#fff',
-                      fontSize: isFollowing(post.user_id) ? 15 : 22,
-                      fontWeight: 900,
-                      boxShadow: isFollowing(post.user_id) ? 'none' : '0 2px 8px rgba(13,148,136,0.45)',
-                    }}
-                    onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.88)' }}
-                    onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
-                  >
-                    {isFollowing(post.user_id) ? '✓' : '+'}
-                  </button>
-                )}
+                {/* follow moved onto the avatar */}
                 {user && post.user_id === user.id && (
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
