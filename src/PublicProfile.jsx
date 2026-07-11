@@ -5,6 +5,7 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 import { notify } from './notify.js'
+import { subscribe, checkAccess, cancelAutoRenew, coinsToNaira } from './subscriptions.js'
 
 function PublicProfile() {
   const { id } = useParams()
@@ -28,6 +29,9 @@ function PublicProfile() {
   const [myRating, setMyRating] = useState(5)
   const [myComment, setMyComment] = useState('')
   const [postingReview, setPostingReview] = useState(false)
+  const [subActive, setSubActive] = useState(false)
+  const [subInfo, setSubInfo] = useState(null)
+  const [subscribing, setSubscribing] = useState(false)
   const [openPost, setOpenPost] = useState(null)
   const timerRef = useRef(null)
   const STORY_DURATION = 6000
@@ -46,7 +50,7 @@ function PublicProfile() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url, cover_url')
+        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url, cover_url, subscription_price')
         .eq('id', id)
         .maybeSingle()
 
@@ -79,6 +83,7 @@ function PublicProfile() {
       setPlaylists(playlistData.data || [])
 
       await loadUserReviews()
+      await refreshAccess()
 
       if (user) {
         const { data: followData } = await supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
@@ -89,6 +94,37 @@ function PublicProfile() {
     }
     load()
   }, [id, user])
+
+  async function refreshAccess() {
+    if (!user || user.id === id) { setSubActive(false); return }
+    const res = await checkAccess(user.id, id)
+    setSubActive(!!res.active)
+    setSubInfo(res.sub || null)
+    if (res.renewed) console.log('subscription auto-renewed')
+  }
+
+  async function handleSubscribe(priceCoins) {
+    if (!user) { navigate('/login'); return }
+    const naira = coinsToNaira(priceCoins)
+    if (!window.confirm(`Subscribe for ${priceCoins} \ud83e\ude99 (\u20a6${naira.toLocaleString()}) per month?\n\nThis renews automatically from your CareCoins wallet. You can cancel anytime.`)) return
+    setSubscribing(true)
+    const res = await subscribe(user.id, id, priceCoins)
+    setSubscribing(false)
+    if (res.insufficient) {
+      if (window.confirm('Not enough CareCoins. Top up your wallet now?')) navigate('/wallet')
+      return
+    }
+    if (res.error) { alert('Could not subscribe: ' + res.error); return }
+    await refreshAccess()
+    notify({ recipientId: id, actorId: user.id, type: 'gift', message: 'subscribed to your content \ud83d\udd13', link: `/u/${user.id}` })
+    alert('Subscribed! You can now read all their subscriber-only content.')
+  }
+
+  async function handleCancelAutoRenew() {
+    if (!window.confirm('Turn off auto-renew? You keep access until the current month ends.')) return
+    await cancelAutoRenew(user.id, id)
+    await refreshAccess()
+  }
 
   async function loadUserReviews() {
     const { data } = await supabase
@@ -242,14 +278,41 @@ function PublicProfile() {
               Edit Profile
             </Link>
           ) : user ? (
-            <button onClick={toggleFollow} style={{
-              background: isFollowing ? '#fff' : theme.tealGradient,
-              color: isFollowing ? theme.navy : '#fff',
-              border: `1px solid ${isFollowing ? theme.border : 'transparent'}`,
-              borderRadius: 20, padding: '7px 18px', fontSize: 13, fontWeight: 700,
-            }}>
-              {isFollowing ? 'Following' : '+ Follow'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={toggleFollow} style={{
+                background: isFollowing ? '#fff' : theme.tealGradient,
+                color: isFollowing ? theme.navy : '#fff',
+                border: `1px solid ${isFollowing ? theme.border : 'transparent'}`,
+                borderRadius: 20, padding: '7px 18px', fontSize: 13, fontWeight: 700,
+              }}>
+                {isFollowing ? 'Following' : '+ Follow'}
+              </button>
+
+              {profile?.subscription_price > 0 && (
+                subActive ? (
+                  <button
+                    onClick={handleCancelAutoRenew}
+                    style={{
+                      background: '#fff', color: theme.tealDeep, border: `1px solid ${theme.tealDeep}`,
+                      borderRadius: 20, padding: '7px 14px', fontSize: 12.5, fontWeight: 800,
+                    }}
+                  >
+                    ✓ Subscribed
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleSubscribe(profile.subscription_price)}
+                    disabled={subscribing}
+                    style={{
+                      background: theme.navy, color: '#fff', border: 'none',
+                      borderRadius: 20, padding: '7px 14px', fontSize: 12.5, fontWeight: 800,
+                    }}
+                  >
+                    {subscribing ? '…' : `🔒 Subscribe · ${profile.subscription_price} 🪙/mo`}
+                  </button>
+                )
+              )}
+            </div>
           ) : (
             <Link to="/login" style={{
               background: theme.tealGradient, color: '#fff', border: 'none',
