@@ -14,6 +14,7 @@ import { notify } from './notify.js'
 import Logo from './Logo.jsx'
 import VoiceRecorder from './VoiceRecorder.jsx'
 import { exportImage, exportVideo, canExportVideo, shareOrDownload } from './voiceCard.js'
+import DrawingBoard from './DrawingBoard.jsx'
 import { loadActiveCreatorIds, coinsToNaira } from './subscriptions.js'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
@@ -27,6 +28,11 @@ function Feed() {
   const [follows, setFollows] = useState([])
   const [subscriberOnly, setSubscriberOnly] = useState(false)
   const [cardAudio, setCardAudio] = useState(null)
+  const [myUsername, setMyUsername] = useState('')
+  const [showDraw, setShowDraw] = useState(false)
+  const [cardVideo, setCardVideo] = useState(null)        // uploaded URL
+  const [cardVideoPreview, setCardVideoPreview] = useState(null)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
   const [sharingId, setSharingId] = useState(null)
   const [unlockedCreators, setUnlockedCreators] = useState([])
   const [savedPosts, setSavedPosts] = useState([])
@@ -117,6 +123,7 @@ function Feed() {
       .maybeSingle()
     const complete = !!(data && data.full_name && data.display_name && data.phone)
     setProfileComplete(complete)
+    setMyUsername(data?.display_name || data?.full_name || '')
     // Only verified businesses or professionals can go live
     setCanGoLive(!!(data && data.is_verified))
   }
@@ -125,7 +132,7 @@ function Feed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only, audio_url')
+      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only, audio_url, video_url')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -262,11 +269,47 @@ function Feed() {
     return !unlockedCreators.includes(post.user_id)
   }
 
+  // Short clip as the card backdrop. Kept small on purpose — data is expensive.
+  async function handleCardVideo(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 12 * 1024 * 1024) {
+      alert('That clip is too large. Please choose one under 12MB (about 15 seconds).')
+      return
+    }
+    setUploadingVideo(true)
+    const ext = file.name.split('.').pop() || 'mp4'
+    const path = `card-${user.id}-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('live-media')
+      .upload(path, file, { contentType: file.type || 'video/mp4' })
+    if (upErr) {
+      setUploadingVideo(false)
+      alert('Could not upload the clip: ' + upErr.message)
+      return
+    }
+    const { data: urlData } = supabase.storage.from('live-media').getPublicUrl(path)
+    setCardVideo(urlData.publicUrl)
+    setCardVideoPreview(URL.createObjectURL(file))
+    // A clip and a photo can't both be the backdrop
+    setImageFile(null)
+    setImagePreview(null)
+    setUploadingVideo(false)
+  }
+
   // Export a Voice Card so it can go out to WhatsApp Status, logo attached.
   // Tries video (card + voice) first; falls back to a PNG if the browser can't.
   async function shareCard(post) {
     setSharingId(post.id)
-    const opts = { text: post.content, theme: post.theme, hasVoice: !!post.audio_url }
+    const handle = profiles[post.user_id]?.display_name || profiles[post.user_id]?.full_name || ''
+    const opts = {
+      text: post.content,
+      theme: post.theme,
+      hasVoice: !!post.audio_url,
+      imageUrl: post.image_url,
+      videoUrl: post.video_url,
+      username: handle,
+    }
 
     try {
       if (post.audio_url && canExportVideo()) {
@@ -275,6 +318,9 @@ function Feed() {
             text: post.content,
             theme: post.theme,
             audioUrl: post.audio_url,
+            imageUrl: post.image_url,
+            videoUrl: post.video_url,
+            username: handle,
           })
           const result = await shareOrDownload(blob, `carefind-card.${ext}`)
           setSharingId(null)
@@ -364,6 +410,7 @@ function Feed() {
       post_type: postType,
       subscriber_only: subscriberOnly,
       audio_url: postType === 'visual' ? cardAudio : null,
+      video_url: postType === 'visual' ? cardVideo : null,
       theme: postType === 'visual' ? visualTheme : null,
       rating: postType === 'review' ? postRating : null,
       image_url: imageUrl,
@@ -404,9 +451,13 @@ function Feed() {
       setPostRating(5)
       setSubscriberOnly(false)
       setCardAudio(null)
+      setCardVideo(null)
+      setCardVideoPreview(null)
       loadFeed()
     } else {
       console.error('Post error:', error)
+      // Surface it — a silent failure just looks like a broken button on a phone.
+      alert('Could not post: ' + (error.message || 'unknown error'))
     }
     setPosting(false)
   }
@@ -808,6 +859,71 @@ function Feed() {
             </div>
           )}
 
+          {/* Voice Card — background: photo or drawing */}
+          {postType === 'visual' && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <label
+                style={{
+                  flex: 1, textAlign: 'center', padding: '9px 10px', borderRadius: 10,
+                  border: `1px solid ${theme.border}`, background: imagePreview ? theme.bg : '#fff',
+                  fontSize: 12, fontWeight: 800, color: theme.navy, cursor: 'pointer',
+                }}
+              >
+                🖼 {imagePreview ? 'Change photo' : 'Add photo'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const f = e.target.files[0]
+                    if (!f) return
+                    setImageFile(f)
+                    setImagePreview(URL.createObjectURL(f))
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setShowDraw(true)}
+                style={{
+                  flex: 1, padding: '9px 10px', borderRadius: 10,
+                  border: `1px solid ${theme.border}`, background: '#fff',
+                  fontSize: 12, fontWeight: 800, color: theme.navy, cursor: 'pointer',
+                }}
+              >
+                ✏️ Draw
+              </button>
+
+              <label
+                style={{
+                  flex: 1, textAlign: 'center', padding: '9px 10px', borderRadius: 10,
+                  border: `1px solid ${theme.border}`, background: cardVideoPreview ? theme.bg : '#fff',
+                  fontSize: 12, fontWeight: 800, color: theme.navy, cursor: 'pointer',
+                }}
+              >
+                {uploadingVideo ? '⏳ …' : cardVideoPreview ? '🎬 Change clip' : '🎬 Clip'}
+                <input type="file" accept="video/*" onChange={handleCardVideo} style={{ display: 'none' }} />
+              </label>
+
+              {(imagePreview || cardVideoPreview) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImageFile(null); setImagePreview(null)
+                    setCardVideo(null); setCardVideoPreview(null)
+                  }}
+                  style={{
+                    padding: '9px 12px', borderRadius: 10, border: `1px solid ${theme.alert}`,
+                    background: '#fef2f2', color: theme.alert, fontSize: 12, fontWeight: 800,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Voice Card — attach a recorded voice */}
           {postType === 'visual' && (
             <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 12, padding: 12, marginBottom: 10 }}>
@@ -935,7 +1051,7 @@ function Feed() {
           {postType === 'visual' ? (
             <div style={{ marginBottom: 8 }}>
               <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden' }}>
-                <VisualCard templateKey={visualTheme} content={content} preview={true} hasVoice={!!cardAudio} />
+                <VisualCard templateKey={visualTheme} content={content} preview={true} hasVoice={!!cardAudio} imageUrl={imagePreview} videoUrl={cardVideoPreview} username={myUsername} />
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
@@ -1186,7 +1302,7 @@ function Feed() {
               </div>
             ) : post.post_type === 'visual' ? (
               <div>
-                <VisualCard templateKey={post.theme} content={post.content} hasVoice={!!post.audio_url} />
+                <VisualCard templateKey={post.theme} content={post.content} hasVoice={!!post.audio_url} imageUrl={post.image_url} videoUrl={post.video_url} username={profiles[post.user_id]?.display_name || profiles[post.user_id]?.full_name || ''} />
 
                 {post.audio_url && (
                   <audio
@@ -1229,7 +1345,7 @@ function Feed() {
                 ) : (
                   <p style={{ margin: '8px 0 10px 0', whiteSpace: 'pre-wrap', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>{post.content}</p>
                 )}
-                {post.image_url && (
+                {post.image_url && post.post_type !== 'visual' && (
                   <img src={post.image_url} alt="post" style={{ width: '100%', borderRadius: 12, marginBottom: 8 }} />
                 )}
               </>
@@ -1404,6 +1520,21 @@ function Feed() {
           </div>
         ))}
       </div>
+      {showDraw && (
+        <DrawingBoard
+          onCancel={() => setShowDraw(false)}
+          onSave={(blob) => {
+            if (blob) {
+              // A drawing is just an image — same pipeline as a photo
+              const file = new File([blob], `drawing-${Date.now()}.png`, { type: 'image/png' })
+              setImageFile(file)
+              setImagePreview(URL.createObjectURL(blob))
+            }
+            setShowDraw(false)
+          }}
+        />
+      )}
+
       {showGoLive && <UserGoLive onClose={() => setShowGoLive(false)} />}
       <SupportPrompt creatorName="CareFind creators" />
       <BottomNav />
