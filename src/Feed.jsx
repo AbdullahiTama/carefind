@@ -453,12 +453,27 @@ function Feed() {
     const existing = follows.find((f) => f.follower_id === user.id && f.following_id === authorId)
 
     if (existing) {
-      await supabase.from('follows').delete().eq('id', existing.id)
+      // Optimistic: drop it from local state right away
+      setFollows((prev) => prev.filter((f) => f.id !== existing.id))
+      const { error } = await supabase.from('follows').delete().eq('id', existing.id)
+      if (error) setFollows((prev) => [...prev, existing]) // put it back if it failed
     } else {
-      await supabase.from('follows').insert({ follower_id: user.id, following_id: authorId })
+      // Optimistic: show as followed immediately
+      const temp = { id: `temp_${Date.now()}`, follower_id: user.id, following_id: authorId }
+      setFollows((prev) => [...prev, temp])
+      const { data, error } = await supabase
+        .from('follows')
+        .insert({ follower_id: user.id, following_id: authorId })
+        .select()
+        .maybeSingle()
+      if (error) {
+        setFollows((prev) => prev.filter((f) => f.id !== temp.id)) // roll back
+        return
+      }
+      // Swap the temp row for the real one so a later unfollow has a valid id
+      if (data) setFollows((prev) => prev.map((f) => (f.id === temp.id ? data : f)))
       notify({ recipientId: authorId, actorId: user.id, type: 'follow', message: 'started following you', link: `/u/${user.id}` })
     }
-    loadFeed()
   }
 
   async function handleReport(postId) {
@@ -952,13 +967,23 @@ function Feed() {
                 {user && post.user_id !== user.id && (
                   <button
                     onClick={() => toggleFollow(post.user_id)}
+                    aria-label={isFollowing(post.user_id) ? 'Following' : 'Follow'}
                     style={{
-                      background: isFollowing(post.user_id) ? theme.tealDeep : 'transparent',
-                      border: `1px solid ${theme.tealDeep}`, borderRadius: 14, padding: '3px 11px',
-                      fontSize: 11, fontWeight: 700, color: isFollowing(post.user_id) ? '#fff' : theme.tealDeep,
+                      width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', padding: 0, lineHeight: 1,
+                      transition: 'transform 0.12s ease',
+                      background: isFollowing(post.user_id) ? '#fff' : theme.tealGradient,
+                      border: isFollowing(post.user_id) ? `2px solid ${theme.tealDeep}` : 'none',
+                      color: isFollowing(post.user_id) ? theme.tealDeep : '#fff',
+                      fontSize: isFollowing(post.user_id) ? 15 : 22,
+                      fontWeight: 900,
+                      boxShadow: isFollowing(post.user_id) ? 'none' : '0 2px 8px rgba(13,148,136,0.45)',
                     }}
+                    onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.88)' }}
+                    onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
                   >
-                    {isFollowing(post.user_id) ? 'Following' : 'Follow'}
+                    {isFollowing(post.user_id) ? '✓' : '+'}
                   </button>
                 )}
                 {user && post.user_id === user.id && (
