@@ -7,6 +7,7 @@ import BottomNav from './BottomNav.jsx'
 import { renderRichText, stripMarkers } from './richText.jsx'
 import ProductUpload from './ProductUpload.jsx'
 import { resizeImage } from './imageResize.js'
+import { MAX_PRICE_COINS, coinsToNaira } from './subscriptions.js'
 import { getActiveBusiness, setActiveBusiness, clearActiveBusiness } from './lib/activeIdentity'
 
 function Profile() {
@@ -27,6 +28,8 @@ function Profile() {
   const [loading, setLoading] = useState(true)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [subPrice, setSubPrice] = useState(0)
+  const [savingPrice, setSavingPrice] = useState(false)
   const [activeBiz, setActiveBiz] = useState(getActiveBusiness())
   const [activeTab, setActiveTab] = useState('posts')
   const [myPosts, setMyPosts] = useState([])
@@ -174,7 +177,7 @@ function Profile() {
     setLoading(true)
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url, avatar_url')
+      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url, avatar_url, subscription_price')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -183,6 +186,7 @@ function Profile() {
       setFullName(profileData.full_name || '')
       setDisplayName(profileData.display_name || '')
       setLocation(profileData.location || '')
+      setSubPrice(profileData.subscription_price || 0)
       setWebsite(profileData.website || '')
     }
 
@@ -233,6 +237,18 @@ function Profile() {
       alert('Could not upload cover: ' + upErr.message)
     }
     setUploadingCover(false)
+  }
+
+  async function savePrice() {
+    const price = Math.max(0, Math.min(MAX_PRICE_COINS, Number(subPrice) || 0))
+    setSavingPrice(true)
+    const { error } = await supabase.from('profiles').update({ subscription_price: price }).eq('id', user.id)
+    setSavingPrice(false)
+    if (error) { alert('Could not save price: ' + error.message); return }
+    loadProfile()
+    alert(price > 0
+      ? `Subscriptions on — ${price} 🪙 (₦${coinsToNaira(price).toLocaleString()}) per month.`
+      : 'Subscriptions turned off.')
   }
 
   async function handleAvatarUpload(e) {
@@ -437,6 +453,43 @@ function Profile() {
             <span style={{ color: '#fff', fontSize: 20 }}>›</span>
           </div>
         </Link>
+
+        {/* Paid subscriptions (verified only) */}
+        {profile?.is_verified && (
+          <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
+            <p style={{ margin: '0 0 4px 0', fontSize: 13, fontWeight: 800, color: theme.navy }}>🔒 Paid subscriptions</p>
+            <p style={{ margin: '0 0 10px 0', fontSize: 11.5, color: theme.textLight }}>
+              Set a monthly price and people can subscribe to unlock your subscriber-only posts. Set 0 to turn it off.
+            </p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[0, 1, 2, 3, 5, 8, 12].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setSubPrice(c)}
+                  style={{
+                    padding: '7px 11px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 800,
+                    background: subPrice === c ? theme.tealDeep : theme.bg,
+                    color: subPrice === c ? '#fff' : theme.textMid,
+                  }}
+                >
+                  {c === 0 ? 'Off' : `${c} 🪙`}
+                </button>
+              ))}
+            </div>
+            <p style={{ margin: '0 0 10px 0', fontSize: 12, fontWeight: 700, color: theme.tealDeep }}>
+              {subPrice > 0
+                ? `Subscribers pay ${subPrice} 🪙 (₦${coinsToNaira(subPrice).toLocaleString()}) per month`
+                : 'Subscriptions are off'}
+            </p>
+            <button
+              onClick={savePrice}
+              disabled={savingPrice}
+              style={{ width: '100%', padding: 11, background: theme.navy, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}
+            >
+              {savingPrice ? 'Saving…' : 'Save subscription price'}
+            </button>
+          </div>
+        )}
 
         {/* Sell on MedMarket (verified only) */}
         {profile?.is_verified && (
