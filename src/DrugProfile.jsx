@@ -12,6 +12,7 @@ function DrugProfile() {
   const { user } = useAuth()
   const [products, setProducts] = useState([])
   const [reviews, setReviews] = useState([])
+  const [reviewers, setReviewers] = useState({})
   const [loading, setLoading] = useState(true)
   const [rating, setRating] = useState(5)
   const [comment, setComment] = useState('')
@@ -25,14 +26,23 @@ function DrugProfile() {
     setLoading(true)
     const decodedName = decodeURIComponent(name)
 
+    // Pull BOTH pathways: CareHub inventory (business_id) and CareFind uploads (owner_id)
     const { data: productData } = await supabase
       .from('products')
-      .select('id, name, generic_name, price, stock, emoji, business_id, businesses(id, name, city, state, whatsapp, visible_on_carefind)')
+      .select('id, name, generic_name, price, stock, emoji, image_url, description, whatsapp, sale_type, price_unit, min_purchase, seller_location, owner_id, business_id, businesses(id, name, city, state, whatsapp, visible_on_carefind)')
       .ilike('name', `%${decodedName}%`)
       .eq('list_on_carefind', true)
-      .gt('stock', 0)
 
-    const filtered = (productData || []).filter((p) => p.businesses?.visible_on_carefind)
+    // Keep a product if it belongs to a visible business (and is in stock),
+    // OR if it was uploaded directly on CareFind (no business attached).
+    const filtered = (productData || []).filter((p) => {
+      if (p.business_id) {
+        if (!p.businesses?.visible_on_carefind) return false
+        if (p.stock != null && p.stock <= 0) return false
+        return true
+      }
+      return true
+    })
     setProducts(filtered)
 
     if (filtered.length > 0) {
@@ -43,16 +53,34 @@ function DrugProfile() {
         .select('id, rating, comment, created_at, product_id, user_id')
         .in('product_id', productIds)
         .order('created_at', { ascending: false })
-      setReviews(reviewData || [])
+      const rv = reviewData || []
+      setReviews(rv)
+
+      // Reviewer names (separate query so it works without a FK join)
+      const userIds = [...new Set(rv.map((r) => r.user_id).filter(Boolean))]
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('id, full_name, display_name, is_verified')
+          .in('id', userIds)
+        const map = {}
+        ;(profs || []).forEach((pr) => { map[pr.id] = pr })
+        setReviewers(map)
+      } else {
+        setReviewers({})
+      }
 
       if (user) {
-        const alreadyReviewed = (reviewData || [])
+        const alreadyReviewed = rv
           .filter((r) => r.user_id === user.id)
           .map((r) => r.product_id)
         setUserReviewedIds(alreadyReviewed)
       }
 
       setSelectedProductId(productIds[0])
+    } else {
+      setReviews([])
+      setReviewers({})
     }
 
     setLoading(false)
@@ -85,6 +113,16 @@ function DrugProfile() {
     setSubmitting(false)
   }
 
+  // WhatsApp link: product's own number first, else the business's number
+  function waLinkFor(p) {
+    const raw = p.whatsapp || p.businesses?.whatsapp
+    if (!raw) return null
+    let num = String(raw).replace(/\D/g, '')
+    if (num.startsWith('0')) num = '234' + num.slice(1)
+    else if (!num.startsWith('234')) num = '234' + num
+    return `https://wa.me/${num}?text=${encodeURIComponent(`Hi, I'm interested in "${p.name}" on CareFind.`)}`
+  }
+
   const avgRating = reviews.length
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
     : null
@@ -95,7 +133,8 @@ function DrugProfile() {
     pct: reviews.length ? Math.round((reviews.filter((r) => r.rating === n).length / reviews.length) * 100) : 0,
   }))
 
-  const lowestPrice = products.length ? Math.min(...products.map((p) => p.price)) : null
+  const pricedProducts = products.filter((p) => p.price != null)
+  const lowestPrice = pricedProducts.length ? Math.min(...pricedProducts.map((p) => p.price)) : null
 
   const alreadyReviewedSelected = userReviewedIds.includes(selectedProductId)
 
@@ -111,7 +150,7 @@ function DrugProfile() {
         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px auto' }}>💊</div>
           <h3 style={{ fontSize: 15, fontWeight: 800, color: theme.navy, margin: '0 0 4px 0' }}>No listings found</h3>
-          <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>This medication isn't listed by any pharmacy yet</p>
+          <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>This medication isn't listed by any seller yet</p>
         </div>
         <BottomNav />
       </div>
@@ -119,7 +158,7 @@ function DrugProfile() {
   }
 
   const drugName = products[0]?.name || decodeURIComponent(name)
-  const genericName = products[0]?.generic_name
+  const genericName = products.find((p) => p.generic_name)?.generic_name
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
@@ -136,10 +175,10 @@ function DrugProfile() {
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <div style={{ flex: 1, background: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: '10px 12px', textAlign: 'center' }}>
             <p style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>{products.length}</p>
-            <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.65)', fontWeight: 700 }}>Pharmacies</p>
+            <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.65)', fontWeight: 700 }}>Sellers</p>
           </div>
           <div style={{ flex: 1, background: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: '10px 12px', textAlign: 'center' }}>
-            <p style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>₦{lowestPrice?.toLocaleString()}</p>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>{lowestPrice != null ? `₦${lowestPrice.toLocaleString()}` : '—'}</p>
             <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.65)', fontWeight: 700 }}>Lowest Price</p>
           </div>
           <div style={{ flex: 1, background: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: '10px 12px', textAlign: 'center' }}>
@@ -291,33 +330,66 @@ function DrugProfile() {
             )}
           </div>
         )}
+
+        <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+          Where to buy
+        </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-          {products.sort((a, b) => a.price - b.price).map((p) => (
-            <div key={p.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div>
-                  <Link to={`/business/${p.business_id}`} style={{ textDecoration: 'none' }}>
-                    <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{p.businesses?.name}</p>
-                  </Link>
-                  <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>{p.businesses?.city}, {p.businesses?.state}</p>
+          {products.slice().sort((a, b) => (a.price == null ? Infinity : a.price) - (b.price == null ? Infinity : b.price)).map((p) => {
+            const wa = waLinkFor(p)
+            const sellerName = p.businesses?.name || 'CareFind seller'
+            const bizLoc = [p.businesses?.city, p.businesses?.state].filter(Boolean).join(', ')
+            const loc = p.seller_location || bizLoc
+            return (
+              <div key={p.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    {p.business_id ? (
+                      <Link to={`/business/${p.business_id}`} style={{ textDecoration: 'none' }}>
+                        <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{sellerName} ›</p>
+                      </Link>
+                    ) : p.owner_id ? (
+                      <Link to={`/u/${p.owner_id}`} style={{ textDecoration: 'none' }}>
+                        <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{sellerName} ›</p>
+                      </Link>
+                    ) : (
+                      <p style={{ margin: '0 0 2px 0', fontWeight: 800, fontSize: 14, color: theme.navy }}>{sellerName}</p>
+                    )}
+                    {loc && <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>📍 {loc}</p>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    {p.price != null && <p style={{ margin: '0 0 2px 0', fontWeight: 900, fontSize: 16, color: theme.tealDeep }}>₦{p.price?.toLocaleString()}</p>}
+                    {p.price_unit && <p style={{ margin: 0, fontSize: 10.5, color: theme.textLight }}>per {p.price_unit}</p>}
+                    {p.business_id && p.stock != null && <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Stock: {p.stock}</p>}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ margin: '0 0 2px 0', fontWeight: 900, fontSize: 16, color: theme.tealDeep }}>₦{p.price?.toLocaleString()}</p>
-                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Stock: {p.stock}</p>
-                </div>
+
+                {(p.sale_type || p.min_purchase) && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {p.sale_type && (
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: p.sale_type === 'wholesale' ? '#7c3aed' : theme.tealDeep, background: p.sale_type === 'wholesale' ? '#f3e8ff' : '#ecfdf5', padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>{p.sale_type}</span>
+                    )}
+                    {p.min_purchase && (
+                      <span style={{ fontSize: 9.5, fontWeight: 700, color: theme.textMid, background: theme.bg, padding: '2px 8px', borderRadius: 10 }}>
+                        Min {p.min_purchase} {p.price_unit || ''}{p.min_purchase > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {wa && (
+                  <a
+                    href={wa}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: 'inline-block', padding: '7px 14px', background: '#25D366', color: '#fff', borderRadius: 12, textDecoration: 'none', fontSize: 12.5, fontWeight: 700 }}
+                  >
+                    💬 WhatsApp
+                  </a>
+                )}
               </div>
-              {p.businesses?.whatsapp && (
-                <a
-                  href={`https://wa.me/${p.businesses.whatsapp}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ display: 'inline-block', padding: '7px 14px', background: '#25D366', color: '#fff', borderRadius: 12, textDecoration: 'none', fontSize: 12.5, fontWeight: 700 }}
-                >
-                  WhatsApp
-                </a>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
@@ -328,21 +400,23 @@ function DrugProfile() {
           <form onSubmit={handleSubmitReview} style={{ border: `1px solid ${theme.border}`, borderRadius: 16, padding: 14, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: 20 }}>
             {products.length > 1 && (
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 700 }}>Reviewing which product?</label>
+                <label style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 700 }}>Reviewing which listing?</label>
                 <select
                   value={selectedProductId || ''}
                   onChange={(e) => setSelectedProductId(e.target.value)}
                   style={{ width: '100%', padding: 10, fontSize: 13, border: `1px solid ${theme.border}`, borderRadius: 10, marginTop: 4, background: '#fff' }}
                 >
                   {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.businesses?.name} — ₦{p.price}</option>
+                    <option key={p.id} value={p.id}>
+                      {(p.businesses?.name || 'CareFind seller')}{p.price != null ? ` — ₦${p.price}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
             )}
 
             {alreadyReviewedSelected ? (
-              <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>You've already reviewed this product listing.</p>
+              <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>You've already reviewed this listing.</p>
             ) : (
               <>
                 <div style={{ marginBottom: 8 }}>
@@ -383,18 +457,34 @@ function DrugProfile() {
         {reviews.length > 0 && (
           <>
             <p style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
-              Recent Reviews
+              All Reviews ({reviews.length})
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {reviews.slice(0, 10).map((r) => {
+              {reviews.map((r) => {
                 const productForReview = products.find((p) => p.id === r.product_id)
+                const who = reviewers[r.user_id]
+                const whoName = who?.full_name || who?.display_name || 'CareFind user'
                 return (
                   <div key={r.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                    <p style={{ margin: '0 0 2px 0', fontSize: 10.5, color: theme.textLight, fontWeight: 700 }}>
-                      {productForReview?.businesses?.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      {r.user_id ? (
+                        <Link to={`/u/${r.user_id}`} style={{ fontSize: 13, fontWeight: 800, color: theme.navy, textDecoration: 'none' }}>
+                          {whoName}{who?.is_verified && <span style={{ color: theme.tealDeep }}> ✓</span>}
+                        </Link>
+                      ) : (
+                        <span style={{ fontSize: 13, fontWeight: 800, color: theme.navy }}>{whoName}</span>
+                      )}
+                      <span style={{ color: theme.warning, fontSize: 13 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                    </div>
+                    {productForReview?.businesses?.name && (
+                      <p style={{ margin: '0 0 4px 0', fontSize: 10.5, color: theme.textLight, fontWeight: 700 }}>
+                        on {productForReview.businesses.name}
+                      </p>
+                    )}
+                    {r.comment && <p style={{ margin: 0, fontSize: 13, color: theme.textMid, lineHeight: 1.5 }}>{r.comment}</p>}
+                    <p style={{ margin: '4px 0 0 0', fontSize: 10.5, color: theme.textLight }}>
+                      {new Date(r.created_at).toLocaleDateString()}
                     </p>
-                    <p style={{ margin: '0 0 4px 0', color: theme.warning, fontSize: 13 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</p>
-                    {r.comment && <p style={{ margin: 0, fontSize: 13, color: theme.textMid }}>{r.comment}</p>}
                   </div>
                 )
               })}
