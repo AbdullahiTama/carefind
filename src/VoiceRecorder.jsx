@@ -2,85 +2,66 @@ import { useState, useRef } from 'react'
 import { supabase } from './lib/supabaseClient'
 import { theme } from './lib/theme'
 
-// Tap to record video from the camera, tap stop, preview, then post.
-// Uses MediaRecorder with camera + mic. Prefers mp4 for iOS playback.
-function VideoRecorder({ showId, onRecorded }) {
+// Tap to record, tap to stop, preview, then it hands the uploaded URL back via onRecorded.
+function VoiceRecorder({ showId, onRecorded, disabled, hq = false }) {
   const [recording, setRecording] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [seconds, setSeconds] = useState(0)
-  const [facing, setFacing] = useState('user') // 'user' = front, 'environment' = back
-  const [live, setLive] = useState(false)
   const [error, setError] = useState('')
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
   const mediaRef = useRef(null)
   const chunksRef = useRef([])
   const blobRef = useRef(null)
   const timerRef = useRef(null)
 
-  async function openCamera(useFacing) {
+  async function startRecording() {
     setError('')
     try {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: useFacing, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: true,
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play().catch(() => {})
-      }
-      setLive(true)
-    } catch (err) {
-      if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
-        setError('Camera blocked. Tap the "AA" or lock icon in your browser address bar → Website Settings → allow Camera & Microphone, then try again.')
-      } else if (err && err.name === 'NotFoundError') {
-        setError('No camera found on this device.')
-      } else {
-        setError('Could not open camera. Make sure no other app is using it, then try again.')
-      }
-      setLive(false)
-    }
-  }
-
-  async function switchCamera() {
-    const next = facing === 'user' ? 'environment' : 'user'
-    setFacing(next)
-    if (live) await openCamera(next)
-  }
-
-  function startRecording() {
-    if (!streamRef.current) return
-    try {
+      // hq = podcast-grade: clean up the room, level the voice, capture at 48kHz.
+      // Standard = light-weight, for live shows on weak networks.
+      const constraints = hq
+        ? {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              channelCount: 1,
+              sampleRate: 48000,
+            },
+          }
+        : { audio: true }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      // Pick a mime type the browser supports
+      // iOS Safari plays mp4/m4a reliably but struggles with webm — so PREFER mp4.
       let mime = ''
-      if (MediaRecorder.isTypeSupported('video/mp4')) mime = 'video/mp4'
-      else if (MediaRecorder.isTypeSupported('video/webm')) mime = 'video/webm'
-      const opts = mime ? { mimeType: mime, videoBitsPerSecond: 800000 } : { videoBitsPerSecond: 800000 }
-      const mr = new MediaRecorder(streamRef.current, opts)
+      if (MediaRecorder.isTypeSupported('audio/mp4')) mime = 'audio/mp4'
+      else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm'
+      // Lower bitrate = smaller file = faster upload on weak networks
+      const bitrate = hq ? 128000 : 32000
+      const opts = mime ? { mimeType: mime, audioBitsPerSecond: bitrate } : { audioBitsPerSecond: bitrate }
+      const mr = new MediaRecorder(stream, opts)
       mediaRef.current = mr
       chunksRef.current = []
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'video/mp4' })
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' })
         blobRef.current = blob
         setPreviewUrl(URL.createObjectURL(blob))
-        // Stop the camera after recording
-        if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-        setLive(false)
+        stream.getTracks().forEach(t => t.stop())
       }
       mr.start()
       setRecording(true)
       setSeconds(0)
       timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000)
     } catch (err) {
-      setError('Could not start recording.')
+      setError('Microphone access denied or unavailable.')
     }
   }
 
   function stopRecording() {
-    if (mediaRef.current && mediaRef.current.state !== 'inactive') mediaRef.current.stop()
+    if (mediaRef.current && mediaRef.current.state !== 'inactive') {
+      mediaRef.current.stop()
+    }
     setRecording(false)
     if (timerRef.current) clearInterval(timerRef.current)
   }
@@ -91,25 +72,19 @@ function VideoRecorder({ showId, onRecorded }) {
     setSeconds(0)
   }
 
-  function closeAll() {
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-    setLive(false)
-    discard()
-  }
-
-  async function sendVideo() {
+  async function sendVoice() {
     if (!blobRef.current) return
     setUploading(true)
-    const ext = (blobRef.current.type.includes('mp4')) ? 'mp4' : 'webm'
-    const path = `rec-${showId}-${Date.now()}.${ext}`
+    const ext = (blobRef.current.type.includes('mp4')) ? 'm4a' : 'webm'
+    const path = `voice-${showId}-${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from('live-media').upload(path, blobRef.current, { contentType: blobRef.current.type })
     if (upErr) {
-      setError('Upload failed. On a weak connection, record a shorter clip.')
+      setError('Upload failed. Check your connection and try again.')
       setUploading(false)
       return
     }
     const { data: urlData } = supabase.storage.from('live-media').getPublicUrl(path)
-    await onRecorded(urlData.publicUrl)
+    onRecorded(urlData.publicUrl)
     setUploading(false)
     discard()
   }
@@ -123,55 +98,32 @@ function VideoRecorder({ showId, onRecorded }) {
     <div style={{ marginBottom: 8 }}>
       {error && <p style={{ margin: '0 0 6px 0', fontSize: 11, color: theme.alert }}>{error}</p>}
 
-      {/* Not started: show the record-video entry button */}
-      {!live && !previewUrl && (
-        <button onClick={() => openCamera(facing)} type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#fdf2f8', color: '#be185d', border: '1px solid #be185d', borderRadius: 20, fontWeight: 700, fontSize: 13 }}>
-          🎥 Record video
+      {!previewUrl && !recording && (
+        <button onClick={startRecording} disabled={disabled} type="button" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#fef2f2', color: theme.alert, border: `1px solid ${theme.alert}`, borderRadius: 20, fontWeight: 700, fontSize: 13 }}>
+          🎙 Record voice note
         </button>
       )}
 
-      {/* Camera is open (previewing or recording) */}
-      {live && (
-        <div>
-          <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#000', marginBottom: 8 }}>
-            <video ref={videoRef} muted playsInline style={{ width: '100%', maxWidth: 300, display: 'block', transform: facing === 'user' ? 'scaleX(-1)' : 'none' }} />
-            {recording && (
-              <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(220,38,38,0.9)', color: '#fff', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} /> REC {fmt(seconds)}
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {!recording && (
-              <>
-                <button onClick={startRecording} type="button" style={{ padding: '8px 16px', background: theme.alert, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, fontSize: 13 }}>● Start recording</button>
-                <button onClick={switchCamera} type="button" style={{ padding: '8px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 16, fontWeight: 700, fontSize: 12 }}>🔄 Flip camera</button>
-                <button onClick={closeAll} type="button" style={{ padding: '8px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 16, fontWeight: 700, fontSize: 12 }}>Cancel</button>
-              </>
-            )}
-            {recording && (
-              <button onClick={stopRecording} type="button" style={{ padding: '8px 18px', background: theme.navy, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, fontSize: 13 }}>■ Stop</button>
-            )}
-          </div>
-        </div>
+      {recording && (
+        <button onClick={stopRecording} type="button" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: theme.alert, color: '#fff', border: 'none', borderRadius: 20, fontWeight: 800, fontSize: 13 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 2, background: '#fff', display: 'inline-block' }} />
+          Stop · {fmt(seconds)}
+        </button>
       )}
 
-      {/* Preview recorded clip before posting */}
       {previewUrl && (
-        <div>
-          <video src={previewUrl} controls playsInline style={{ width: '100%', maxWidth: 300, borderRadius: 12, display: 'block', marginBottom: 8 }} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={sendVideo} disabled={uploading} type="button" style={{ padding: '8px 16px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, fontSize: 12 }}>
-              {uploading ? 'Uploading… please wait' : '📡 Post video'}
-            </button>
-            <button onClick={() => { discard(); openCamera(facing) }} disabled={uploading} type="button" style={{ padding: '8px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 16, fontWeight: 700, fontSize: 12 }}>Re-record</button>
-            <button onClick={discard} disabled={uploading} type="button" style={{ padding: '8px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 16, fontWeight: 700, fontSize: 12 }}>Discard</button>
-          </div>
-          <p style={{ margin: '5px 0 0 0', fontSize: 10, color: theme.textLight }}>Keep clips short on weak networks — video uploads are large.</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <audio controls src={previewUrl} style={{ height: 36, maxWidth: 180 }} />
+          <button onClick={sendVoice} disabled={uploading} type="button" style={{ padding: '7px 14px', background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 16, fontWeight: 800, fontSize: 12 }}>
+            {uploading ? 'Uploading… please wait' : '📡 Post voice'}
+          </button>
+          <button onClick={discard} type="button" style={{ padding: '7px 12px', background: theme.bg, color: theme.textMid, border: `1px solid ${theme.border}`, borderRadius: 16, fontWeight: 700, fontSize: 12 }}>
+            Discard
+          </button>
         </div>
       )}
     </div>
   )
 }
 
-export default VideoRecorder
+export default VoiceRecorder
