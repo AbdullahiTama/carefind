@@ -46,7 +46,7 @@ function PublicProfile() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, full_name, display_name, is_verified, verification_label, location, website')
+        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url')
         .eq('id', id)
         .maybeSingle()
 
@@ -219,12 +219,12 @@ function PublicProfile() {
           >
             <div style={{
               width: 86, height: 86, borderRadius: '50%',
-              background: theme.tealGradient,
+              background: profile?.avatar_url ? `url(${profile.avatar_url}) center/cover` : theme.tealGradient,
               border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#fff', fontSize: 28, fontWeight: 800, boxSizing: 'border-box',
             }}>
-              {displayName[0]?.toUpperCase() || '?'}
+              {!profile?.avatar_url && (displayName[0]?.toUpperCase() || '?')}
             </div>
           </div>
           {hasStory && (
@@ -293,9 +293,9 @@ function PublicProfile() {
         </div>
 
         {/* Content tabs */}
-        <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 12 }}>
+        <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {[['posts', '📝 Posts'], ['reposts', '🔁 Reposts'], ['playlists', '🎬 Playlists'], ['reviews', '⭐ Reviews']].map(([key, label]) => (
-            <button key={key} onClick={() => setActiveTab(key)} style={{ flex: 1, padding: '10px 4px', background: 'none', border: 'none', borderBottom: activeTab === key ? `2px solid ${theme.tealDeep}` : '2px solid transparent', color: activeTab === key ? theme.navy : theme.textLight, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
+            <button key={key} onClick={() => setActiveTab(key)} style={{ flexShrink: 0, whiteSpace: 'nowrap', padding: '10px 12px', background: 'none', border: 'none', borderBottom: activeTab === key ? `2px solid ${theme.tealDeep}` : '2px solid transparent', color: activeTab === key ? theme.navy : theme.textLight, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
               {label}
             </button>
           ))}
