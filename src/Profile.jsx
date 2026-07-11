@@ -4,7 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
-import { renderRichText, stripMarkers } from './richText.jsx'
+import { renderRichText, stripMarkers, previewText } from './richText.jsx'
 import ProductUpload from './ProductUpload.jsx'
 import { resizeImage } from './imageResize.js'
 import { MAX_PRICE_COINS, coinsToNaira } from './subscriptions.js'
@@ -679,7 +679,7 @@ function Profile() {
                     )}
                     <div style={{ padding: '8px 10px', flex: 1, overflow: 'hidden' }}>
                       {p.post_type && p.post_type !== 'text' && <span style={{ fontSize: 9, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{typeIcon[p.post_type]} {p.post_type}</span>}
-                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkers((p.content || '').replace(/^🔁\s*/, ''))}</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: 11.5, color: theme.navy, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{previewText((p.content || '').replace(/^🔁\s*/, ''))}</p>
                     </div>
                   </div>
                 </button>
@@ -721,7 +721,7 @@ function Profile() {
             </div>
             {openPost.image_url && <img src={openPost.image_url} alt="" style={{ width: '100%', borderRadius: 12, marginBottom: 12, display: 'block' }} />}
             {openPost.post_type && openPost.post_type !== 'text' && <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase' }}>{openPost.post_type}</span>}
-            <p style={{ margin: '6px 0 0 0', fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{renderRichText((openPost.content || '').replace(/^🔁\s*/, ''))}</p>
+            <p style={{ margin: '6px 0 0 0', fontSize: 15, color: theme.navy, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{renderRichText(previewText((openPost.content || '').replace(/^🔁\s*/, '')))}</p>
             <p style={{ margin: '12px 0 0 0', fontSize: 11, color: theme.textLight }}>{openPost.created_at ? new Date(openPost.created_at).toLocaleDateString() : ''}</p>
           </div>
         </div>
