@@ -139,7 +139,7 @@ function Search() {
           <h1 style={{ margin: 0, fontSize: 25, fontWeight: 900, letterSpacing: '-0.02em' }}>MedMarket</h1>
         </div>
         <p style={{ margin: '0 0 16px 0', fontSize: 13.5, color: 'rgba(255,255,255,0.72)', lineHeight: 1.45 }}>
-          Your health marketplace — find medications, trusted pharmacies, hospitals, clinics, skincare brands, wellness products, laboratories and verified health professionals near you, all in one place.
+          Your health marketplace — find medications, trusted health facilities, hospitals, clinics, skincare brands, wellness products, laboratories and verified health professionals near you, all in one place.
         </p>
         <form onSubmit={runSearch}>
           <div style={{ display: 'flex', gap: 8 }}>
