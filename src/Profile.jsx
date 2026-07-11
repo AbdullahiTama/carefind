@@ -23,6 +23,7 @@ function Profile() {
   const [fullName, setFullName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [location, setLocation] = useState('')
+  const [bio, setBio] = useState('')
   const [website, setWebsite] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -177,7 +178,7 @@ function Profile() {
     setLoading(true)
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url, avatar_url, subscription_price')
+      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url, avatar_url, subscription_price, bio')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -187,6 +188,7 @@ function Profile() {
       setDisplayName(profileData.display_name || '')
       setLocation(profileData.location || '')
       setSubPrice(profileData.subscription_price || 0)
+      setBio(profileData.bio || '')
       setWebsite(profileData.website || '')
     }
 
@@ -213,6 +215,7 @@ function Profile() {
       display_name: displayName.trim(),
       location: location.trim() || null,
       website: website.trim() || null,
+      bio: bio.trim() || null,
     }).eq('id', user.id)
     setEditing(false)
     setSaving(false)
@@ -349,6 +352,14 @@ function Profile() {
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Username" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
             <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value.slice(0, 160))}
+              placeholder="Bio — tell people who you are"
+              rows={3}
+              style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10, fontFamily: 'inherit', resize: 'none' }}
+            />
+            <p style={{ margin: '-4px 0 0 0', fontSize: 10.5, color: theme.textLight, textAlign: 'right' }}>{bio.length}/160</p>
             <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" style={{ padding: 11, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10 }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={saveProfile} disabled={saving} style={{ flex: 1, padding: 11, background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13 }}>{saving ? 'Saving…' : 'Save'}</button>
@@ -369,6 +380,11 @@ function Profile() {
               </div>
               <button onClick={() => setEditing(true)} style={{ border: `1px solid ${theme.border}`, background: '#fff', color: theme.navy, borderRadius: 20, padding: '6px 16px', fontSize: 13, fontWeight: 700 }}>Edit</button>
             </div>
+            {profile?.bio && (
+              <p style={{ margin: '10px 0 0 0', fontSize: 13.5, color: theme.textMid, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                {profile.bio}
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
               {profile?.location && <span style={{ fontSize: 12.5, color: theme.textLight }}>📍 {profile.location}</span>}
               {profile?.website && <a href={profile.website} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: theme.tealDeep, textDecoration: 'none' }}>🔗 {profile.website}</a>}
