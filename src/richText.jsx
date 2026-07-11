@@ -104,3 +104,35 @@ export function stripMarkers(text) {
     .replace(/\{[bisu]\}/g, '')
     .replace(/\{\/[bisu]\}/g, '')
 }
+
+// Article posts are stored as JSON blocks (text, drawing, voice, image...).
+// This pulls out just the readable words for previews, so we never dump raw JSON.
+export function previewText(content) {
+  if (!content) return ''
+  const raw = String(content)
+
+  // Only attempt a parse if it actually looks like a block array
+  if (raw.trim().startsWith('[')) {
+    try {
+      const blocks = JSON.parse(raw)
+      if (Array.isArray(blocks)) {
+        const words = blocks
+          .filter((b) => b && typeof b === 'object')
+          .map((b) => {
+            if (b.type === 'text' || b.type === 'heading' || b.type === 'quote') return b.content || ''
+            if (b.type === 'drawing') return '✏️ drawing'
+            if (b.type === 'image') return '🖼 image'
+            if (b.type === 'voice') return '🎙 voice note'
+            return ''
+          })
+          .filter(Boolean)
+          .join(' ')
+        return stripMarkers(words)
+      }
+    } catch (e) {
+      // not valid JSON — fall through and treat it as plain text
+    }
+  }
+
+  return stripMarkers(raw)
+}
