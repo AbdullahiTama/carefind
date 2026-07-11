@@ -11,6 +11,9 @@ import ArticleEditor from './ArticleEditor.jsx'
 import GoLive from './GoLive.jsx'
 import UserGoLive from './UserGoLive.jsx'
 import { notify } from './notify.js'
+import Logo from './Logo.jsx'
+import VoiceRecorder from './VoiceRecorder.jsx'
+import { exportImage, exportVideo, canExportVideo, shareOrDownload } from './voiceCard.js'
 import { loadActiveCreatorIds, coinsToNaira } from './subscriptions.js'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
@@ -23,6 +26,8 @@ function Feed() {
   const [profiles, setProfiles] = useState({})
   const [follows, setFollows] = useState([])
   const [subscriberOnly, setSubscriberOnly] = useState(false)
+  const [cardAudio, setCardAudio] = useState(null)
+  const [sharingId, setSharingId] = useState(null)
   const [unlockedCreators, setUnlockedCreators] = useState([])
   const [savedPosts, setSavedPosts] = useState([])
   const [userSubscriptions, setUserSubscriptions] = useState([])
@@ -72,7 +77,7 @@ function Feed() {
 
   const postTypeLabels = {
     text: 'Text Post',
-    visual: 'Visual Post',
+    visual: '🎤 Voice Card',
     question: 'Question',
     review: 'Review',
     article: 'Article',
@@ -120,7 +125,7 @@ function Feed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only')
+      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only, audio_url')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -257,6 +262,44 @@ function Feed() {
     return !unlockedCreators.includes(post.user_id)
   }
 
+  // Export a Voice Card so it can go out to WhatsApp Status, logo attached.
+  // Tries video (card + voice) first; falls back to a PNG if the browser can't.
+  async function shareCard(post) {
+    setSharingId(post.id)
+    const opts = { text: post.content, theme: post.theme, hasVoice: !!post.audio_url }
+
+    try {
+      if (post.audio_url && canExportVideo()) {
+        try {
+          const { blob, ext } = await exportVideo({
+            text: post.content,
+            theme: post.theme,
+            audioUrl: post.audio_url,
+          })
+          const result = await shareOrDownload(blob, `carefind-card.${ext}`)
+          setSharingId(null)
+          if (result === 'downloaded') alert('Saved with your voice — post it to your WhatsApp Status.')
+          return
+        } catch (e) {
+          // Video failed on this device — fall through to the image so the user still gets something
+          console.warn('Video export failed, falling back to image:', e)
+        }
+      }
+
+      const blob = await exportImage(opts)
+      const result = await shareOrDownload(blob, 'carefind-card.png')
+      setSharingId(null)
+      if (result === 'downloaded') {
+        alert(post.audio_url
+          ? "Saved as an image. This phone can't build the video — the voice still plays inside CareFind."
+          : 'Saved — post it to your WhatsApp Status.')
+      }
+    } catch (e) {
+      setSharingId(null)
+      alert('Could not prepare the card: ' + (e.message || 'unknown error'))
+    }
+  }
+
   async function loadUnlocked() {
     if (!user) { setUnlockedCreators([]); return }
     const ids = await loadActiveCreatorIds(user.id)
@@ -320,6 +363,7 @@ function Feed() {
       content: content.trim(),
       post_type: postType,
       subscriber_only: subscriberOnly,
+      audio_url: postType === 'visual' ? cardAudio : null,
       theme: postType === 'visual' ? visualTheme : null,
       rating: postType === 'review' ? postRating : null,
       image_url: imageUrl,
@@ -359,6 +403,7 @@ function Feed() {
       setImagePreview(null)
       setPostRating(5)
       setSubscriberOnly(false)
+      setCardAudio(null)
       loadFeed()
     } else {
       console.error('Post error:', error)
@@ -569,9 +614,7 @@ function Feed() {
         borderRadius: '0 0 28px 28px', color: '#fff',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.02em' }}>
-            CareFind<span style={{ color: theme.tealBright }}>.</span>
-          </span>
+          <Logo size={30} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {user && canGoLive && (
               <button onClick={() => setShowGoLive(true)} style={{ padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
@@ -762,6 +805,37 @@ function Feed() {
                   {themeLabels[t]}
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Voice Card — attach a recorded voice */}
+          {postType === 'visual' && (
+            <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 12, padding: 12, marginBottom: 10 }}>
+              {cardAudio ? (
+                <div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.tealDeep }}>
+                    🎤 Voice attached
+                  </p>
+                  <audio src={cardAudio} controls style={{ width: '100%', height: 36 }} />
+                  <button
+                    type="button"
+                    onClick={() => setCardAudio(null)}
+                    style={{ marginTop: 8, background: 'none', border: 'none', color: theme.alert, fontSize: 12, fontWeight: 700 }}
+                  >
+                    Remove voice
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 800, color: theme.navy }}>
+                    🎤 Add your voice <span style={{ fontWeight: 600, color: theme.textLight }}>(optional)</span>
+                  </p>
+                  <p style={{ margin: '0 0 10px 0', fontSize: 10.5, color: theme.textLight }}>
+                    People can download this card with your voice and share it to WhatsApp Status — with your CareFind logo on it.
+                  </p>
+                  <VoiceRecorder hq showId={`card-${user?.id || 'anon'}`} onRecorded={(url) => setCardAudio(url)} />
+                </>
+              )}
             </div>
           )}
 
@@ -1111,7 +1185,35 @@ function Feed() {
                 </div>
               </div>
             ) : post.post_type === 'visual' ? (
-              <VisualCard templateKey={post.theme} content={post.content} />
+              <div>
+                <VisualCard templateKey={post.theme} content={post.content} />
+
+                {post.audio_url && (
+                  <audio
+                    src={post.audio_url}
+                    controls
+                    preload="none"
+                    style={{ width: '100%', height: 38, marginTop: 8 }}
+                  />
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => shareCard(post)}
+                  disabled={sharingId === post.id}
+                  style={{
+                    width: '100%', marginTop: 8, padding: '10px 12px',
+                    background: theme.navy, color: '#fff', border: 'none',
+                    borderRadius: 12, fontWeight: 800, fontSize: 12.5, cursor: 'pointer',
+                  }}
+                >
+                  {sharingId === post.id
+                    ? 'Preparing…'
+                    : post.audio_url && canExportVideo()
+                      ? '⬇️ Download with voice · share to status'
+                      : '⬇️ Download card · share to status'}
+                </button>
+              </div>
             ) : (
               <>
                 {post.post_type === 'review' && post.rating && (
