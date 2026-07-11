@@ -199,7 +199,7 @@ function Search() {
                     </div>
                   </Link>
                 ) : (
-                  <Link key={i} className="mm-card" to={`/business/${p.business_id}`} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
+                  <Link key={i} className="mm-card" to={`/drug/${encodeURIComponent(p.name)}`} style={{ textDecoration: 'none', color: 'inherit', flexShrink: 0, width: 130 }}>
                     <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
                       <div style={{ fontSize: 30, marginBottom: 6 }}>{p.emoji || '💊'}</div>
                       <p style={{ margin: '0 0 3px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
