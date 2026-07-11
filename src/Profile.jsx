@@ -6,6 +6,7 @@ import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 import { renderRichText, stripMarkers } from './richText.jsx'
 import ProductUpload from './ProductUpload.jsx'
+import { resizeImage } from './imageResize.js'
 import { getActiveBusiness, setActiveBusiness, clearActiveBusiness } from './lib/activeIdentity'
 
 function Profile() {
@@ -25,6 +26,7 @@ function Profile() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [activeBiz, setActiveBiz] = useState(getActiveBusiness())
   const [activeTab, setActiveTab] = useState('posts')
   const [myPosts, setMyPosts] = useState([])
@@ -172,7 +174,7 @@ function Profile() {
     setLoading(true)
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url')
+      .select('id, full_name, display_name, is_verified, verification_label, location, website, cover_url, avatar_url')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -217,15 +219,40 @@ function Profile() {
     const file = e.target.files[0]
     if (!file) return
     setUploadingCover(true)
-    const ext = file.name.split('.').pop()
-    const path = `cover-${user.id}-${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('covers').upload(path, file)
+    // Shrink before upload — covers are wide, so allow a bigger max
+    const resized = await resizeImage(file, 1400, 0.82)
+    const path = `cover-${user.id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage
+      .from('covers')
+      .upload(path, resized, { contentType: 'image/jpeg' })
     if (!upErr) {
       const { data: urlData } = supabase.storage.from('covers').getPublicUrl(path)
       await supabase.from('profiles').update({ cover_url: urlData.publicUrl }).eq('id', user.id)
       loadProfile()
+    } else {
+      alert('Could not upload cover: ' + upErr.message)
     }
     setUploadingCover(false)
+  }
+
+  async function handleAvatarUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingAvatar(true)
+    // Avatars display small — 600px is plenty and keeps the upload tiny
+    const resized = await resizeImage(file, 600, 0.85)
+    const path = `avatar-${user.id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage
+      .from('avatars')
+      .upload(path, resized, { contentType: 'image/jpeg' })
+    if (!upErr) {
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+      await supabase.from('profiles').update({ avatar_url: urlData.publicUrl }).eq('id', user.id)
+      loadProfile()
+    } else {
+      alert('Could not upload photo: ' + upErr.message)
+    }
+    setUploadingAvatar(false)
   }
 
   function switchToBusiness(biz) {
@@ -273,8 +300,28 @@ function Profile() {
           </label>
         </div>
         <div style={{ position: 'absolute', bottom: -46, left: 16 }}>
-          <div style={{ width: 88, height: 88, borderRadius: '50%', background: theme.tealGradient, border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 30, fontWeight: 800 }}>
-            {displayLabel[0]?.toUpperCase() || '?'}
+          <div style={{ position: 'relative', width: 88, height: 88 }}>
+            <div style={{
+              width: 88, height: 88, borderRadius: '50%',
+              background: profile?.avatar_url ? `url(${profile.avatar_url}) center/cover` : theme.tealGradient,
+              border: '4px solid #fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 30, fontWeight: 800,
+            }}>
+              {!profile?.avatar_url && (displayLabel[0]?.toUpperCase() || '?')}
+            </div>
+
+            {/* Change photo */}
+            <label style={{
+              position: 'absolute', bottom: 0, right: 0,
+              width: 30, height: 30, borderRadius: '50%',
+              background: theme.navy, border: '2px solid #fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 13, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+            }}>
+              {uploadingAvatar ? '…' : '📷'}
+              <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+            </label>
           </div>
         </div>
       </div>
