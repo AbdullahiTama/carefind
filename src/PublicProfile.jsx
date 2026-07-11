@@ -46,7 +46,7 @@ function PublicProfile() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url')
+        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url, cover_url')
         .eq('id', id)
         .maybeSingle()
 
@@ -203,7 +203,7 @@ function PublicProfile() {
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
       <div style={{ position: 'relative', marginBottom: 55 }}>
-        <div style={{ height: 110, background: theme.heroGradient, position: 'relative' }}>
+        <div style={{ height: 110, background: profile?.cover_url ? `url(${profile.cover_url}) center/cover` : theme.heroGradient, position: 'relative' }}>
           <Link to="/" style={{ position: 'absolute', top: 16, left: 16, color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Feed</Link>
         </div>
         <div style={{ position: 'absolute', bottom: -46, left: 16 }}>
