@@ -141,7 +141,7 @@ function Feed() {
       const userIds = [...new Set((postData || []).map((p) => p.user_id))]
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, display_name, full_name, is_verified, verification_label, specialty')
+        .select('id, display_name, full_name, is_verified, verification_label, specialty, avatar_url')
         .in('id', userIds)
 
       const profileMap = {}
@@ -922,12 +922,15 @@ function Feed() {
                   <div
                     style={{
                       width: 38, height: 38, borderRadius: '50%',
-                      background: theme.tealGradient,
+                      background: profiles[post.user_id]?.avatar_url
+                        ? `url(${profiles[post.user_id].avatar_url}) center/cover`
+                        : theme.tealGradient,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       color: '#fff', fontSize: 14, fontWeight: 800,
                     }}
                   >
-                    {(profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase()}
+                    {!profiles[post.user_id]?.avatar_url &&
+                      (profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase()}
                   </div>
 
                   {/* Follow badge sitting on the avatar (TikTok-style) */}
