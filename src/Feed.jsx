@@ -11,6 +11,7 @@ import ArticleEditor from './ArticleEditor.jsx'
 import GoLive from './GoLive.jsx'
 import UserGoLive from './UserGoLive.jsx'
 import { notify } from './notify.js'
+import { loadActiveCreatorIds, coinsToNaira } from './subscriptions.js'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
 import { useRef } from 'react'
@@ -21,6 +22,8 @@ function Feed() {
   const [reactions, setReactions] = useState([])
   const [profiles, setProfiles] = useState({})
   const [follows, setFollows] = useState([])
+  const [subscriberOnly, setSubscriberOnly] = useState(false)
+  const [unlockedCreators, setUnlockedCreators] = useState([])
   const [savedPosts, setSavedPosts] = useState([])
   const [userSubscriptions, setUserSubscriptions] = useState([])
   const [reportedPosts, setReportedPosts] = useState([])
@@ -118,7 +121,7 @@ function Feed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count')
+      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -222,6 +225,7 @@ function Feed() {
     checkProfileComplete()
     loadLatestNews()
     loadUnreadNotifs()
+    loadUnlocked()
     loadLiveSessions()
   }, [user])
 
@@ -243,6 +247,19 @@ function Feed() {
       .order('published_at', { ascending: false })
       .limit(6)
     setLatestNews(data || [])
+  }
+
+  // A post is locked if it's subscriber-only, isn't yours, and you haven't subscribed.
+  function isLocked(post) {
+    if (!post.subscriber_only) return false
+    if (user && post.user_id === user.id) return false
+    return !unlockedCreators.includes(post.user_id)
+  }
+
+  async function loadUnlocked() {
+    if (!user) { setUnlockedCreators([]); return }
+    const ids = await loadActiveCreatorIds(user.id)
+    setUnlockedCreators(ids)
   }
 
   async function loadUnreadNotifs() {
@@ -301,6 +318,7 @@ function Feed() {
       user_id: user.id,
       content: content.trim(),
       post_type: postType,
+      subscriber_only: subscriberOnly,
       theme: postType === 'visual' ? visualTheme : null,
       rating: postType === 'review' ? postRating : null,
       image_url: imageUrl,
@@ -339,6 +357,7 @@ function Feed() {
       setImageFile(null)
       setImagePreview(null)
       setPostRating(5)
+      setSubscriberOnly(false)
       loadFeed()
     } else {
       console.error('Post error:', error)
@@ -694,6 +713,27 @@ function Feed() {
           </div>
 
           {canGoLive && (
+            <button
+              type="button"
+              onClick={() => setSubscriberOnly((v) => !v)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 13px', borderRadius: 12, marginBottom: 12, cursor: 'pointer',
+                border: subscriberOnly ? 'none' : `1px solid ${theme.border}`,
+                background: subscriberOnly ? theme.navy : theme.bg,
+                color: subscriberOnly ? '#fff' : theme.textMid,
+              }}
+            >
+              <span style={{ fontSize: 12.5, fontWeight: 800 }}>
+                {subscriberOnly ? '🔒 Subscribers only' : '🔓 Free for everyone'}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>
+                {subscriberOnly ? 'Only paying subscribers can read this' : 'Tap to lock'}
+              </span>
+            </button>
+          )}
+
+          {canGoLive && (
             <Link to="/playlist/create" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 13px', borderRadius: 12, background: theme.navy, color: '#fff', fontSize: 12.5, fontWeight: 800, textDecoration: 'none', marginBottom: 12 }}>
               🎬 Create a Playlist (series)
             </Link>
@@ -1028,7 +1068,43 @@ function Feed() {
               </div>
             )}
 
-            {post.post_type === 'visual' ? (
+            {isLocked(post) ? (
+              <div style={{ margin: '8px 0 10px 0' }}>
+                {/* Teaser: the opening of the post, fading into nothing */}
+                <div style={{ position: 'relative', maxHeight: 110, overflow: 'hidden' }}>
+                  <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 14, color: theme.textMid, lineHeight: 1.5 }}>
+                    {String(post.content || '').slice(0, 220)}
+                  </p>
+                  <div style={{
+                    position: 'absolute', left: 0, right: 0, bottom: 0, height: 70,
+                    background: 'linear-gradient(to bottom, rgba(255,255,255,0), #fff)',
+                  }} />
+                </div>
+
+                {/* The gate */}
+                <div style={{
+                  border: `1px solid ${theme.border}`, borderRadius: 14,
+                  padding: 16, textAlign: 'center', background: theme.bg, marginTop: 4,
+                }}>
+                  <p style={{ margin: '0 0 4px 0', fontSize: 20 }}>🔒</p>
+                  <p style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>
+                    Subscriber-only content
+                  </p>
+                  <p style={{ margin: '0 0 12px 0', fontSize: 12.5, color: theme.textLight }}>
+                    Subscribe to {profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || 'this creator'} to read the rest.
+                  </p>
+                  <Link
+                    to={`/u/${post.user_id}`}
+                    style={{
+                      display: 'inline-block', padding: '10px 22px', background: theme.tealGradient,
+                      color: '#fff', borderRadius: 12, fontWeight: 800, fontSize: 13, textDecoration: 'none',
+                    }}
+                  >
+                    Subscribe to read
+                  </Link>
+                </div>
+              </div>
+            ) : post.post_type === 'visual' ? (
               <VisualCard templateKey={post.theme} content={post.content} />
             ) : (
               <>
