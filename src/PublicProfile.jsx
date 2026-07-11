@@ -50,7 +50,7 @@ function PublicProfile() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url, cover_url, subscription_price')
+        .select('id, full_name, display_name, is_verified, verification_label, location, website, avatar_url, cover_url, subscription_price, bio')
         .eq('id', id)
         .maybeSingle()
 
@@ -331,6 +331,11 @@ function PublicProfile() {
           <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep, background: '#ecfdf5', padding: '2px 10px', borderRadius: 20, border: `1px solid ${theme.tealBright}`, display: 'inline-block', marginBottom: 8 }}>
             ✓ Verified {profile.verification_label}
           </span>
+        )}
+        {profile.bio && (
+          <p style={{ margin: '10px 0 0 0', fontSize: 13.5, color: theme.textMid, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+            {profile.bio}
+          </p>
         )}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, marginTop: 8 }}>
           {profile.location && <span style={{ fontSize: 12.5, color: theme.textLight }}>📍 {profile.location}</span>}
