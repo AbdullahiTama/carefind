@@ -1,104 +1,269 @@
-const cardStyles = {
-  'teal-depth': {
-    label: '🌊 Ocean',
-    background: `
-      radial-gradient(ellipse 55% 50% at 85% 15%, rgba(20,184,166,0.45) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 45% at 15% 75%, rgba(15,118,110,0.5) 0%, transparent 55%),
-      linear-gradient(155deg, #0a1628 0%, #0f2a3a 30%, #0d3a35 60%, #0f766e 100%)`,
-  },
-  'navy-clinical': {
-    label: '✨ Sky',
-    background: `
-      radial-gradient(ellipse 80% 40% at 50% 0%, rgba(186,230,253,0.2) 0%, transparent 55%),
-      radial-gradient(ellipse 60% 60% at 50% 50%, rgba(14,116,144,0.3) 0%, transparent 65%),
-      linear-gradient(175deg, #dbeafe 0%, #93c5fd 8%, #1e40af 22%, #1e3a8a 45%, #0f172a 75%, #020617 100%)`,
-  },
-  'midnight-teal': {
-    label: '🌃 Night',
-    background: `
-      radial-gradient(ellipse 50% 55% at 85% 50%, rgba(20,184,166,0.3) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 15% 30%, rgba(15,118,110,0.25) 0%, transparent 55%),
-      linear-gradient(135deg, #020617 0%, #0f172a 40%, #0c2a2a 70%, #0f3d38 100%)`,
-    showGrid: true,
-  },
-  'forest-wellness': {
-    label: '🌿 Forest',
-    background: `
-      radial-gradient(ellipse 55% 50% at 80% 20%, rgba(20,184,166,0.4) 0%, transparent 55%),
-      radial-gradient(ellipse 45% 55% at 20% 75%, rgba(6,78,59,0.5) 0%, transparent 50%),
-      linear-gradient(145deg, #011a0a 0%, #022c16 25%, #043a20 55%, #065f46 85%, #0f766e 100%)`,
-  },
-  'slate-pulse': {
-    label: '❤️ Pulse',
-    background: `
-      radial-gradient(ellipse 60% 45% at 50% 100%, rgba(15,118,110,0.5) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 40% at 90% 10%, rgba(20,184,166,0.25) 0%, transparent 55%),
-      linear-gradient(160deg, #020617 0%, #0f172a 35%, #0a1f2f 60%, #0f3a38 100%)`,
-    showEcg: true,
-  },
+// Voice Card: renders the shareable card onto a canvas and exports it.
+//
+//  - exportImage()  -> PNG. Works on every device.
+//  - exportVideo()  -> MP4/WebM with the voice track. Works where the browser
+//                      supports MediaRecorder + canvas capture (Android/Chrome).
+//
+// Both bake in the CareFind logo, so the brand travels with the post.
+
+export const CARD_THEMES = {
+  'teal-depth':      { from: '#0F766E', to: '#0D9488', text: '#FFFFFF' },
+  'navy-clinical':   { from: '#0F172A', to: '#1E293B', text: '#FFFFFF' },
+  'midnight-teal':   { from: '#042F2E', to: '#134E4A', text: '#FFFFFF' },
+  'forest-wellness': { from: '#14532D', to: '#166534', text: '#FFFFFF' },
+  'slate-pulse':     { from: '#7F1D1D', to: '#9F1239', text: '#FFFFFF' },
 }
 
-function VisualCard({ templateKey, content, preview = false }) {
-  const style = cardStyles[templateKey] || cardStyles['teal-depth']
+const SIZE = 1080 // square — the format WhatsApp Status likes
 
-  return (
-    <div style={{
-      background: style.background,
-      borderRadius: preview ? 14 : 0,
-      minHeight: preview ? 160 : 200,
-      position: 'relative',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'flex-end',
-    }}>
-      {/* ECG line for slate-pulse */}
-      {style.showEcg && (
-        <svg style={{ position: 'absolute', top: '35%', left: 0, width: '100%', opacity: 0.18, zIndex: 1 }} viewBox="0 0 400 50" preserveAspectRatio="none" height="50">
-          <polyline points="0,25 50,25 70,2 90,48 110,25 150,25 170,10 190,40 210,25 260,25 280,5 300,45 320,25 400,25"
-            stroke="#14b8a6" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-        </svg>
-      )}
-
-      {/* Dot grid for midnight */}
-      {style.showGrid && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 1,
-          backgroundImage: 'radial-gradient(circle 1.5px at 50% 50%, rgba(20,184,166,0.18) 0%, transparent 100%)',
-          backgroundSize: '28px 28px',
-        }} />
-      )}
-
-      {/* Dark overlay so text is always readable */}
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: 2,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)',
-      }} />
-
-      {/* Content */}
-      <div style={{ position: 'relative', zIndex: 3, padding: preview ? '14px 16px 14px' : '20px 22px 20px' }}>
-        <p style={{
-          fontSize: preview ? 15.5 : 19, fontWeight: 800, color: '#fff', lineHeight: 1.45,
-          letterSpacing: '-0.01em', textShadow: '0 2px 12px rgba(0,0,0,0.7)',
-          margin: '0 0 14px 0', whiteSpace: 'pre-wrap',
-          minHeight: preview ? 40 : 60,
-        }}>
-          {content || ''}
-        </p>
-
-        {/* CareFind branding only — small and minimal */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{
-            width: 20, height: 20, borderRadius: 6, fontSize: 10, fontWeight: 900, color: '#fff',
-            background: 'linear-gradient(135deg, #14b8a6, #0f766e)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>C</div>
-          <span style={{ fontSize: 9.5, fontWeight: 900, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em' }}>CAREFIND</span>
-        </div>
-      </div>
-    </div>
-  )
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
 }
 
-export { cardStyles }
-export default VisualCard
+// Wraps text to the card width and centres the block vertically.
+function drawWrappedText(ctx, text, color) {
+  const maxWidth = SIZE - 200
+  const words = String(text || '').split(/\s+/).filter(Boolean)
+
+  // Shrink the font until it fits comfortably
+  let fontSize = 76
+  let lines = []
+  for (; fontSize >= 34; fontSize -= 4) {
+    ctx.font = `800 ${fontSize}px system-ui, -apple-system, Helvetica, sans-serif`
+    lines = []
+    let line = ''
+    for (const w of words) {
+      const test = line ? `${line} ${w}` : w
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line)
+        line = w
+      } else {
+        line = test
+      }
+    }
+    if (line) lines.push(line)
+    if (lines.length * fontSize * 1.35 <= SIZE - 420) break
+  }
+
+  ctx.fillStyle = color
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  const lh = fontSize * 1.35
+  const startY = SIZE / 2 - ((lines.length - 1) * lh) / 2 - 30
+  lines.forEach((ln, i) => {
+    ctx.fillText(ln, SIZE / 2, startY + i * lh)
+  })
+}
+
+// The CareFind logo, bottom-left — the whole point of the export.
+function drawLogo(ctx) {
+  const s = 64
+  const x = 70
+  const y = SIZE - 70 - s
+
+  const g = ctx.createLinearGradient(x, y, x + s, y + s)
+  g.addColorStop(0, '#0D9488')
+  g.addColorStop(1, '#14B8A6')
+  ctx.fillStyle = g
+  roundRect(ctx, x, y, s, s, s * 0.28)
+  ctx.fill()
+
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = `900 ${s * 0.58}px system-ui, -apple-system, Helvetica, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('C', x + s / 2, y + s / 2 + 2)
+
+  ctx.fillStyle = 'rgba(255,255,255,0.72)'
+  ctx.font = '700 30px system-ui, -apple-system, Helvetica, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.letterSpacing = '4px'
+  ctx.fillText('CAREFIND', x + s + 20, y + s / 2 + 2)
+  ctx.letterSpacing = '0px'
+}
+
+// Optional: a soft sound-wave hint so a silent screenshot still reads as "has voice"
+function drawWave(ctx, color, phase = 0) {
+  const cx = SIZE / 2
+  const baseY = SIZE - 190
+  const bars = 28
+  const gap = 14
+  const w = 8
+  const totalW = bars * w + (bars - 1) * gap
+  let x = cx - totalW / 2
+
+  ctx.fillStyle = color
+  for (let i = 0; i < bars; i++) {
+    const t = i / bars
+    const h = 16 + Math.abs(Math.sin(t * Math.PI * 3 + phase)) * 44
+    roundRect(ctx, x, baseY - h / 2, w, h, 4)
+    ctx.fill()
+    x += w + gap
+  }
+}
+
+export function drawCard(canvas, { text, theme = 'teal-depth', hasVoice = false, phase = 0 }) {
+  const t = CARD_THEMES[theme] || CARD_THEMES['teal-depth']
+  const ctx = canvas.getContext('2d')
+
+  const g = ctx.createLinearGradient(0, 0, SIZE, SIZE)
+  g.addColorStop(0, t.from)
+  g.addColorStop(1, t.to)
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, SIZE, SIZE)
+
+  drawWrappedText(ctx, text, t.text)
+  if (hasVoice) drawWave(ctx, 'rgba(255,255,255,0.35)', phase)
+  drawLogo(ctx)
+}
+
+function newCanvas() {
+  const c = document.createElement('canvas')
+  c.width = SIZE
+  c.height = SIZE
+  return c
+}
+
+// ---- PNG export (always works) ----
+export async function exportImage(opts) {
+  const canvas = newCanvas()
+  drawCard(canvas, { ...opts, phase: 0 })
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png')
+  })
+}
+
+// Can this browser record a canvas + audio into a video?
+export function canExportVideo() {
+  try {
+    if (typeof MediaRecorder === 'undefined') return false
+    const c = document.createElement('canvas')
+    if (typeof c.captureStream !== 'function') return false
+    return !!pickMimeType()
+  } catch (e) {
+    return false
+  }
+}
+
+function pickMimeType() {
+  const candidates = [
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ]
+  for (const m of candidates) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m
+  }
+  return null
+}
+
+// ---- Video export (card + voice) ----
+// Plays the voice through an audio graph, records the animated canvas alongside it.
+// Resolves { blob, ext } or throws if the browser can't do it.
+export async function exportVideo({ text, theme, audioUrl, onProgress }) {
+  const mimeType = pickMimeType()
+  if (!mimeType || typeof MediaRecorder === 'undefined') {
+    throw new Error('This browser cannot create videos')
+  }
+
+  const canvas = newCanvas()
+  drawCard(canvas, { text, theme, hasVoice: true, phase: 0 })
+
+  const canvasStream = canvas.captureStream(30)
+
+  // Pull the voice in and route it into the recording
+  const res = await fetch(audioUrl)
+  const buf = await res.arrayBuffer()
+  const AudioCtx = window.AudioContext || window.webkitAudioContext
+  const actx = new AudioCtx()
+  const decoded = await actx.decodeAudioData(buf)
+
+  const dest = actx.createMediaStreamDestination()
+  const src = actx.createBufferSource()
+  src.buffer = decoded
+  src.connect(dest)
+
+  const stream = new MediaStream([
+    ...canvasStream.getVideoTracks(),
+    ...dest.stream.getAudioTracks(),
+  ])
+
+  const recorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: 2500000,
+    audioBitsPerSecond: 128000, // keep the voice podcast-clear in the exported video
+  })
+  const chunks = []
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data) }
+
+  const duration = decoded.duration || 3
+  let raf
+  const startedAt = performance.now()
+
+  const animate = () => {
+    const elapsed = (performance.now() - startedAt) / 1000
+    drawCard(canvas, { text, theme, hasVoice: true, phase: elapsed * 6 })
+    if (onProgress) onProgress(Math.min(1, elapsed / duration))
+    if (elapsed < duration) raf = requestAnimationFrame(animate)
+  }
+
+  return new Promise((resolve, reject) => {
+    recorder.onerror = (e) => {
+      cancelAnimationFrame(raf)
+      actx.close()
+      reject(new Error('Recording failed'))
+    }
+
+    recorder.onstop = () => {
+      cancelAnimationFrame(raf)
+      actx.close()
+      const blob = new Blob(chunks, { type: mimeType })
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
+      resolve({ blob, ext })
+    }
+
+    recorder.start()
+    src.start()
+    animate()
+
+    // Stop shortly after the voice ends
+    setTimeout(() => {
+      try { recorder.stop() } catch (e) { /* already stopped */ }
+    }, duration * 1000 + 400)
+  })
+}
+
+// Hand the file to the user — native share sheet where possible, else download.
+export async function shareOrDownload(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type })
+
+  // The share sheet is what puts it straight into WhatsApp Status
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'CareFind' })
+      return 'shared'
+    } catch (e) {
+      if (e.name === 'AbortError') return 'cancelled'
+      // fall through to download
+    }
+  }
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
+  return 'downloaded'
+}
