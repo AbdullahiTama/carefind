@@ -940,12 +940,12 @@ function Feed() {
                         width: 22, height: 22, borderRadius: '50%', padding: 0, lineHeight: 1,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer',
-                        background: isFollowing(post.user_id) ? '#fff' : '#f97316',
+                        background: isFollowing(post.user_id) ? '#fff' : theme.navy,
                         border: isFollowing(post.user_id) ? `2px solid ${theme.tealDeep}` : '2px solid #fff',
                         color: isFollowing(post.user_id) ? theme.tealDeep : '#fff',
                         fontSize: isFollowing(post.user_id) ? 11 : 16,
                         fontWeight: 900,
-                        boxShadow: isFollowing(post.user_id) ? 'none' : '0 2px 6px rgba(249,115,22,0.55)',
+                        boxShadow: isFollowing(post.user_id) ? 'none' : '0 2px 7px rgba(15,23,42,0.5)',
                       }}
                     >
                       {isFollowing(post.user_id) ? '✓' : '+'}
