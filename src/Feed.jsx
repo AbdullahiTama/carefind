@@ -935,7 +935,7 @@ function Feed() {
           {postType === 'visual' ? (
             <div style={{ marginBottom: 8 }}>
               <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden' }}>
-                <VisualCard templateKey={visualTheme} content={content} preview={true} />
+                <VisualCard templateKey={visualTheme} content={content} preview={true} hasVoice={!!cardAudio} />
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
@@ -1186,7 +1186,7 @@ function Feed() {
               </div>
             ) : post.post_type === 'visual' ? (
               <div>
-                <VisualCard templateKey={post.theme} content={post.content} />
+                <VisualCard templateKey={post.theme} content={post.content} hasVoice={!!post.audio_url} />
 
                 {post.audio_url && (
                   <audio
