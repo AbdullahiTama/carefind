@@ -15,6 +15,7 @@ import Logo from './Logo.jsx'
 import VoiceRecorder from './VoiceRecorder.jsx'
 import { exportImage, exportVideo, canExportVideo, shareOrDownload } from './voiceCard.js'
 import DrawingBoard from './DrawingBoard.jsx'
+import { resizeImage } from './imageResize.js'
 import { loadActiveCreatorIds, coinsToNaira } from './subscriptions.js'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
@@ -384,18 +385,26 @@ function Feed() {
 
     if (imageFile) {
       setUploadingImage(true)
-      const fileExt = imageFile.name.split('.').pop()
-      const filePath = `${user.id}-${Date.now()}.${fileExt}`
+
+      // Shrink first — a full-size phone photo is often 5-8MB and the upload dies on it.
+      const resized = await resizeImage(imageFile, 1400, 0.85)
+      const filePath = `${user.id}-${Date.now()}.jpg`
 
       const { error: uploadError } = await supabase.storage
         .from('post-images')
-        .upload(filePath, imageFile)
+        .upload(filePath, resized, { contentType: 'image/jpeg' })
 
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(filePath)
-        imageUrl = urlData.publicUrl
-      }
       setUploadingImage(false)
+
+      if (uploadError) {
+        // Never post silently without the photo the user chose.
+        setPosting(false)
+        alert('Could not upload the photo: ' + uploadError.message)
+        return
+      }
+
+      const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(filePath)
+      imageUrl = urlData.publicUrl
     }
 
     if (screenContent(content.trim())) {
