@@ -525,7 +525,8 @@ function Profile() {
           {ownedBusinesses.length === 0 && (
             <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 14, padding: 16, textAlign: 'center' }}>
               <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textLight }}>You don't manage any businesses yet.</p>
-              <Link to="/claim-business" style={{ fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none' }}>Claim a business →</Link>
+              <Link to="/claim-business" style={{ fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none', display: 'block', marginBottom: 6 }}>Claim a business →</Link>
+              <Link to="/claim-staff-position" style={{ fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none', display: 'block' }}>Claim your position at a company →</Link>
             </div>
           )}
 
