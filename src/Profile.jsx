@@ -74,12 +74,30 @@ function Profile() {
 
   async function loadApprovedClaims() {
     if (!user) return
-    const { data } = await supabase
+    const { data: claims, error } = await supabase
       .from('staff_claims')
-      .select('id, staff_id, status, staff:staff_id(id, full_name, public_title, business_id, businesses(name))')
+      .select('id, staff_id, status, staff:staff_id(id, full_name, public_title, business_id)')
       .eq('user_id', user.id)
       .eq('status', 'approved')
-    setApprovedClaims(data || [])
+
+    if (error) {
+      console.error('Approved claims load error:', error)
+      setApprovedClaims([])
+      return
+    }
+
+    const list = claims || []
+    const bizIds = [...new Set(list.map((c) => c.staff?.business_id).filter(Boolean))]
+    let bizMap = {}
+    if (bizIds.length > 0) {
+      const { data: bizzes } = await supabase.from('businesses').select('id, name').in('id', bizIds)
+      ;(bizzes || []).forEach((b) => { bizMap[b.id] = b.name })
+    }
+
+    setApprovedClaims(list.map((c) => ({
+      ...c,
+      businessName: c.staff?.business_id ? (bizMap[c.staff.business_id] || 'Company') : 'Company',
+    })))
   }
 
   async function loadMyPosts() {
@@ -299,7 +317,7 @@ function Profile() {
       fullName: claim.staff?.full_name,
       publicTitle: claim.staff?.public_title,
       businessId: claim.staff?.business_id,
-      businessName: claim.staff?.businesses?.name,
+      businessName: claim.businessName,
     }
     setActiveStaffIdentity(identity)
     setActiveStaff(identity)
@@ -606,7 +624,6 @@ function Profile() {
           {/* Approved staff position options */}
           {approvedClaims.map((c) => {
             const isActive = activeStaff?.staffId === c.staff_id
-            const businessName = c.staff?.businesses?.name || 'Company'
             const title = c.staff?.public_title || 'Team Member'
             return (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${isActive ? theme.tealDeep : theme.border}`, background: isActive ? '#ecfdf5' : theme.cardBg, marginBottom: 8 }}>
@@ -615,7 +632,7 @@ function Profile() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</p>
-                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{businessName}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{c.businessName}</p>
                 </div>
                 {isActive ? (
                   <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>
