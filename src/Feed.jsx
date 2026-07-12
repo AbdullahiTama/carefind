@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import BottomNav from './BottomNav.jsx'
@@ -30,7 +30,13 @@ function Feed() {
   const [subscriberOnly, setSubscriberOnly] = useState(false)
   const [cardAudio, setCardAudio] = useState(null)
   const [myUsername, setMyUsername] = useState('')
+  const navigate = useNavigate()
   const [showDraw, setShowDraw] = useState(false)
+  const [feedTab, setFeedTab] = useState('foryou')
+  const [platformLive, setPlatformLive] = useState(null)
+  const [myAvatar, setMyAvatar] = useState(null)
+  const [seriesList, setSeriesList] = useState([])
+  const [createOpen, setCreateOpen] = useState(false)
   const [cardVideo, setCardVideo] = useState(null)        // uploaded URL
   const [cardVideoPreview, setCardVideoPreview] = useState(null)
   const [uploadingVideo, setUploadingVideo] = useState(false)
@@ -72,6 +78,23 @@ function Feed() {
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [showGoLive, setShowGoLive] = useState(false)
   const [liveSessions, setLiveSessions] = useState([])
+
+  const POST_KIND = {
+    question: 'Question',
+    article: 'Article',
+    visual: 'Voice',
+    review: 'Review',
+  }
+
+  const FEED_TABS = [
+    ['foryou', 'For you'],
+    ['following', 'Following'],
+    ['question', 'Questions'],
+    ['article', 'Articles'],
+    ['visual', 'Voice'],
+    ['review', 'Reviews'],
+    ['series', 'Series'],
+  ]
 
   const themeLabels = {
     'teal-depth': '🌊 Ocean',
@@ -119,12 +142,13 @@ function Feed() {
     if (!user) { setProfileComplete(true); setCanGoLive(false); return }
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, display_name, phone, is_verified, verification_label')
+      .select('full_name, display_name, phone, is_verified, verification_label, avatar_url')
       .eq('id', user.id)
       .maybeSingle()
     const complete = !!(data && data.full_name && data.display_name && data.phone)
     setProfileComplete(complete)
     setMyUsername(data?.display_name || data?.full_name || '')
+    setMyAvatar(data?.avatar_url || null)
     // Only verified businesses or professionals can go live
     setCanGoLive(!!(data && data.is_verified))
   }
@@ -238,6 +262,8 @@ function Feed() {
     loadLatestNews()
     loadUnreadNotifs()
     loadUnlocked()
+    loadPlatformLive()
+    loadSeries()
     loadLiveSessions()
   }, [user])
 
@@ -345,6 +371,28 @@ function Feed() {
       setSharingId(null)
       alert('Could not prepare the card: ' + (e.message || 'unknown error'))
     }
+  }
+
+  // The banner is for CareFind's own broadcasts only. A user going live
+  // shows up in the stories rail and in notifications, not here.
+  async function loadPlatformLive() {
+    const { data } = await supabase
+      .from('live_shows')
+      .select('id, title')
+      .eq('status', 'live')
+      .eq('is_platform', true)
+      .order('started_at', { ascending: false })
+      .limit(1)
+    setPlatformLive(data && data[0] ? data[0] : null)
+  }
+
+  async function loadSeries() {
+    const { data } = await supabase
+      .from('playlists')
+      .select('id, title, description, owner_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    setSeriesList(data || [])
   }
 
   async function loadUnlocked() {
@@ -470,6 +518,37 @@ function Feed() {
     }
     setPosting(false)
   }
+
+  function startPost(type) {
+    setPostType(type)
+    const el = document.getElementById('post-composer')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setTimeout(() => el.querySelector('textarea')?.focus(), 400)
+    }
+  }
+
+  const CREATE_OPTIONS = [
+    { key: 'text',     icon: '💬', label: 'Post',          run: () => startPost('text') },
+    { key: 'question', icon: '❓', label: 'Question',      run: () => startPost('question') },
+    { key: 'review',   icon: '⭐', label: 'Review',        run: () => startPost('review') },
+    { key: 'visual',   icon: '🎤', label: 'Voice card',    run: () => startPost('visual') },
+    { key: 'article',  icon: '📄', label: 'Article',       run: () => startPost('article') },
+    { key: 'story',    icon: '📖', label: 'Story',         run: () => navigate('/profile') },
+    { key: 'series',   icon: '🎬', label: 'Series',        run: () => navigate('/playlist/create'), pro: true },
+    { key: 'product',  icon: '🛒', label: 'Sell a product', run: () => navigate('/profile'), pro: true },
+    { key: 'live',     icon: '📡', label: 'Go live',       run: () => setShowGoLive(true), pro: true, danger: true },
+  ]
+
+  // The tabs answer "what do you want to read?" — they slice the same feed.
+  const visiblePosts = posts.filter((p) => {
+    if (feedTab === 'foryou') return true
+    if (feedTab === 'following') {
+      if (!user) return false
+      return follows.some((f) => f.follower_id === user.id && f.following_id === p.user_id)
+    }
+    return p.post_type === feedTab
+  })
 
   function likeCount(postId) {
     return reactions.filter((r) => r.post_id === postId).length
@@ -670,52 +749,92 @@ function Feed() {
         .article-body strong { font-weight: 800; color: ${theme.navy}; }
       `}</style>
       <div style={{
-        background: theme.heroGradient, margin: '-20px -20px 0 -20px', padding: '22px 20px 26px 20px',
-        borderRadius: '0 0 28px 28px', color: '#fff',
+        background: theme.heroGradient, margin: '-20px -20px 0 -20px', padding: '14px 16px 0',
+        borderRadius: '0 0 22px 22px', color: '#fff',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <Logo size={30} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {user && canGoLive && (
-              <button onClick={() => setShowGoLive(true)} style={{ padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
-                🔴 Go Live
-              </button>
+        {/* App bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 13 }}>
+          <div style={{ marginRight: 'auto' }}><Logo size={30} /></div>
+
+          <Link to="/search" style={{
+            width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', background: 'rgba(255,255,255,0.08)', fontSize: 15, textDecoration: 'none',
+          }}>🔍</Link>
+
+          <Link to="/notifications" style={{
+            width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', background: 'rgba(255,255,255,0.08)', fontSize: 15,
+            textDecoration: 'none', position: 'relative',
+          }}>
+            🔔
+            {unreadNotifs > 0 && (
+              <span style={{
+                position: 'absolute', top: 3, right: 3, minWidth: 15, height: 15, padding: '0 3px',
+                borderRadius: 8, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
+                border: `1.5px solid ${theme.navy}`,
+              }}>{unreadNotifs > 99 ? '99+' : unreadNotifs}</span>
             )}
-            <Link to="/notifications" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <span style={{ fontSize: 22 }}>🔔</span>
-              {unreadNotifs > 0 && (
-                <span style={{
-                  position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16, padding: '0 4px',
-                  borderRadius: 8, background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 900,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-                }}>{unreadNotifs > 99 ? '99+' : unreadNotifs}</span>
-              )}
-            </Link>
-            <Link to={user ? '/profile' : '/login'}>
+          </Link>
+
+          <Link to={user ? '/profile' : '/login'} style={{ textDecoration: 'none' }}>
             <div style={{
-              width: 34, height: 34, borderRadius: '50%', background: theme.tealBright,
+              width: 34, height: 34, borderRadius: '50%',
+              background: myAvatar ? `url(${myAvatar}) center/cover` : theme.tealGradient,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: theme.navy, fontWeight: 800, fontSize: 13, border: '2px solid rgba(255,255,255,0.3)',
+              color: '#fff', fontWeight: 800, fontSize: 13, border: '2px solid rgba(255,255,255,0.28)',
             }}>
-              {user ? (user.email ? user.email[0].toUpperCase() : '?') : '?'}
+              {!myAvatar && (myUsername ? myUsername[0].toUpperCase() : '?')}
             </div>
           </Link>
-          </div>
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
-          Your CareFind feed
-        </h1>
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: '0 0 16px 0', fontWeight: 500 }}>
-          Health tips, questions & community near you
-        </p>
-        <Link to="/search" style={{
-          display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.12)',
-          border: '1px solid rgba(255,255,255,0.18)', borderRadius: 16, padding: '12px 16px',
-          color: 'rgba(255,255,255,0.6)', fontSize: 13, textDecoration: 'none',
-        }}>
-          🔍 Search medication, pharmacy, clinic...
-        </Link>
+
+        {/* What do you want to read? */}
+        <div style={{ display: 'flex', gap: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {FEED_TABS.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setFeedTab(key)}
+              style={{
+                flexShrink: 0, padding: '0 0 11px', background: 'none', border: 'none',
+                fontSize: 13.5, fontWeight: feedTab === key ? 800 : 700,
+                color: feedTab === key ? '#fff' : 'rgba(255,255,255,0.45)',
+                borderBottom: feedTab === key ? `2.5px solid ${theme.tealBright}` : '2.5px solid transparent',
+                whiteSpace: 'nowrap', cursor: 'pointer',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Only when CareFind itself is on air */}
+      {platformLive && (
+        <Link to={`/live-show/${platformLive.id}`} style={{
+          display: 'flex', alignItems: 'center', gap: 11, margin: '12px 0 0',
+          padding: '12px 13px', borderRadius: 14, textDecoration: 'none',
+          background: 'linear-gradient(135deg, #7F1D1D, #B91C1C)',
+        }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 11, flexShrink: 0, fontSize: 17,
+            background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>📡</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: '0 0 1px', fontSize: 12.5, fontWeight: 900, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', boxShadow: '0 0 0 3px rgba(255,255,255,0.3)' }} />
+              CareFind is live
+            </p>
+            <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {platformLive.title}
+            </p>
+          </div>
+          <span style={{
+            background: '#fff', color: '#B91C1C', fontSize: 11, fontWeight: 900,
+            padding: '7px 13px', borderRadius: 9, flexShrink: 0,
+          }}>Watch</span>
+        </Link>
+      )}
 
       {/* Stories row */}
       <Stories />
@@ -1142,7 +1261,7 @@ function Feed() {
       )}
 
       {loading && <p>Loading feed...</p>}
-      {!loading && posts.length === 0 && (
+      {!loading && feedTab !== 'series' && visiblePosts.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{
             width: 56, height: 56, borderRadius: 16, background: '#ecfdf5', display: 'flex',
@@ -1150,13 +1269,50 @@ function Feed() {
           }}>
             🌱
           </div>
-          <h3 style={{ fontSize: 15, fontWeight: 800, color: theme.navy, margin: '0 0 4px 0' }}>No posts yet</h3>
-          <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>Be the first to share something with the community</p>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: theme.navy, margin: '0 0 4px 0' }}>
+            {feedTab === 'following' ? 'Nothing from people you follow' : 'Nothing here yet'}
+          </h3>
+          <p style={{ fontSize: 13, color: theme.textLight, margin: 0 }}>
+            {feedTab === 'foryou' ? 'Be the first to share something with the community'
+              : feedTab === 'following' ? 'Follow a few people and their posts land here'
+              : 'Tap + to make the first one'}
+          </p>
+        </div>
+      )}
+
+      {feedTab === 'series' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {seriesList.length === 0 && (
+            <p style={{ textAlign: 'center', fontSize: 13, color: theme.textLight, padding: '28px 0' }}>
+              No series yet.
+            </p>
+          )}
+          {seriesList.map((pl) => (
+            <Link key={pl.id} to={`/playlist/${pl.id}`} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px',
+              border: `1px solid ${theme.border}`, borderRadius: 16, background: theme.cardBg,
+              textDecoration: 'none',
+            }}>
+              <div style={{
+                width: 46, height: 46, borderRadius: 12, flexShrink: 0, fontSize: 21,
+                background: theme.heroGradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>🎬</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.navy }}>{pl.title}</p>
+                {pl.description && (
+                  <p style={{ margin: '2px 0 0', fontSize: 11.5, color: theme.textLight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {pl.description}
+                  </p>
+                )}
+              </div>
+              <span style={{ color: theme.textLight }}>›</span>
+            </Link>
+          ))}
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {posts.map((post) => (
+        {feedTab !== 'series' && visiblePosts.map((post) => (
           <div key={post.id} style={{
             border: `1px solid ${theme.border}`, borderRadius: 18, padding: post.post_type === 'visual' ? 0 : 16,
             overflow: 'hidden', background: theme.cardBg, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
@@ -1236,7 +1392,15 @@ function Feed() {
                     {post.post_type}
                   </span>
                 )}
-                {/* follow moved onto the avatar */}
+                {POST_KIND[post.post_type] && (
+                  <span style={{
+                    marginLeft: 'auto', fontSize: 9, fontWeight: 900, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', color: theme.tealDeep, background: '#ECFDF5',
+                    padding: '3px 8px', borderRadius: 7, flexShrink: 0,
+                  }}>
+                    {POST_KIND[post.post_type]}
+                  </span>
+                )}
                 {user && post.user_id === user.id && (
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
@@ -1529,6 +1693,70 @@ function Feed() {
           </div>
         ))}
       </div>
+      {createOpen && (
+        <div
+          onClick={() => setCreateOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: '22px 22px 0 0', width: '100%', maxWidth: 480,
+              padding: '16px 16px 20px', boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 14px' }} />
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 900, color: theme.navy }}>Create</h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 9 }}>
+              {CREATE_OPTIONS.map((opt) => {
+                const locked = opt.pro && !canGoLive
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      setCreateOpen(false)
+                      if (locked) { navigate('/verify'); return }
+                      opt.run()
+                    }}
+                    style={{
+                      position: 'relative', border: `1px solid ${opt.danger ? '#FCA5A5' : theme.border}`,
+                      borderRadius: 14, padding: '13px 6px 10px', textAlign: 'center',
+                      background: opt.danger ? '#FEF2F2' : '#fff',
+                      opacity: locked ? 0.55 : 1, cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ display: 'block', fontSize: 21, marginBottom: 6 }}>{opt.icon}</span>
+                    <span style={{
+                      fontSize: 10.5, fontWeight: opt.danger ? 900 : 700,
+                      color: opt.danger ? theme.alert : theme.textMid,
+                    }}>{opt.label}</span>
+                    {opt.pro && (
+                      <span style={{
+                        position: 'absolute', top: 7, right: 8, fontSize: 9,
+                        fontWeight: 900, color: theme.tealDeep,
+                      }}>✓</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {!canGoLive && (
+              <p style={{ margin: '12px 2px 0', fontSize: 10.5, color: theme.textLight, textAlign: 'center' }}>
+                ✓ Verified only ·{' '}
+                <Link to="/verify" style={{ color: theme.tealDeep, fontWeight: 800, textDecoration: 'none' }}>
+                  Get verified
+                </Link>
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {showDraw && (
         <DrawingBoard
           onCancel={() => setShowDraw(false)}
@@ -1546,7 +1774,7 @@ function Feed() {
 
       {showGoLive && <UserGoLive onClose={() => setShowGoLive(false)} />}
       <SupportPrompt creatorName="CareFind creators" />
-      <BottomNav />
+      <BottomNav onCompose={() => setCreateOpen(true)} />
       {giftingPost && (
         <GiftPanel
           postId={giftingPost.postId}
