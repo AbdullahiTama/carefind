@@ -12,6 +12,7 @@ import PublicProfile from './PublicProfile.jsx'
 import SavedPosts from './SavedPosts.jsx'
 import VerifyProfessional from './VerifyProfessional.jsx'
 import ClaimBusiness from './ClaimBusiness.jsx'
+import ClaimStaffPosition from './ClaimStaffPosition.jsx'
 import Dashboard from './Dashboard.jsx'
 import BusinessDashboard from './BusinessDashboard.jsx'
 import ProfessionalDashboard from './ProfessionalDashboard.jsx'
@@ -51,6 +52,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/saved" element={<SavedPosts />} />
           <Route path="/verify" element={<VerifyProfessional />} />
           <Route path="/claim-business" element={<ClaimBusiness />} />
+          <Route path="/claim-staff-position" element={<ClaimStaffPosition />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/business-dashboard" element={<BusinessDashboard />} />
           <Route path="/professional-dashboard" element={<ProfessionalDashboard />} />
