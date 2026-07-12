@@ -15,16 +15,15 @@ function ClaimStaffPosition() {
   const [loadingStaff, setLoadingStaff] = useState(false)
   const [myClaims, setMyClaims] = useState([])
   const [loading, setLoading] = useState(true)
-  const [submittingId, setSubmittingId] = useState(null)
+  const [verifyingId, setVerifyingId] = useState(null)
+  const [emailInput, setEmailInput] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [claimError, setClaimError] = useState('')
 
   useEffect(() => {
     async function load() {
       if (!user) { setLoading(false); return }
-      const { data } = await supabase
-        .from('staff_claims')
-        .select('id, staff_id, status, staff:staff_id(full_name, public_title, businesses(name))')
-        .eq('user_id', user.id)
-      setMyClaims(data || [])
+      await refreshMyClaims()
       setLoading(false)
     }
     if (!authLoading) load()
@@ -55,6 +54,9 @@ function ClaimStaffPosition() {
   async function selectBusiness(biz) {
     setSelectedBusiness(biz)
     setLoadingStaff(true)
+    setVerifyingId(null)
+    setEmailInput('')
+    setClaimError('')
     const { data } = await supabase
       .from('staff_directory')
       .select('staff_id, full_name, public_title, role, business_name')
@@ -63,15 +65,29 @@ function ClaimStaffPosition() {
     setLoadingStaff(false)
   }
 
-  async function handleClaim(staffId) {
-    if (!user) return
-    setSubmittingId(staffId)
-    const { error } = await supabase.from('staff_claims').insert({
-      user_id: user.id,
-      staff_id: staffId,
+  function startVerify(staffId) {
+    setVerifyingId(staffId)
+    setEmailInput('')
+    setClaimError('')
+  }
+
+  async function submitClaim(staffId) {
+    if (!emailInput.trim()) { setClaimError('Enter the work email on your staff account.'); return }
+    setSubmitting(true)
+    setClaimError('')
+    const { data, error } = await supabase.rpc('attempt_staff_claim', {
+      p_staff_id: staffId,
+      p_email: emailInput.trim(),
     })
-    if (!error) await refreshMyClaims()
-    setSubmittingId(null)
+    setSubmitting(false)
+    if (error) { setClaimError('Something went wrong. Please try again.'); return }
+    if (data === 'no_match') { setClaimError("That email doesn't match our records for this position."); return }
+    if (data === 'already_claimed') { setClaimError('You already have a claim in for this position.'); return }
+    if (data === 'not_logged_in') { setClaimError('Please log in again.'); return }
+    // ok
+    setVerifyingId(null)
+    setEmailInput('')
+    await refreshMyClaims()
   }
 
   function alreadyClaimed(staffId) {
@@ -95,7 +111,7 @@ function ClaimStaffPosition() {
         <Link to="/profile" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Profile</Link>
         <h1 style={{ fontSize: 21, fontWeight: 900, margin: '14px 0 4px 0' }}>Claim Your Position</h1>
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: '0 0 16px 0' }}>
-          Find your company, then find your name on their team
+          Find your company, then verify with your work email
         </p>
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8 }}>
           <div style={{
@@ -166,7 +182,7 @@ function ClaimStaffPosition() {
                 <p style={{ margin: '0 0 2px 0', fontSize: 15, fontWeight: 800, color: theme.navy }}>{selectedBusiness.name}</p>
                 <p style={{ margin: 0, fontSize: 12, color: theme.textLight }}>Find your name below</p>
               </div>
-              <button onClick={() => { setSelectedBusiness(null); setStaffList([]) }} style={{ background: 'none', border: 'none', color: theme.tealDeep, fontSize: 13, fontWeight: 700 }}>Change company</button>
+              <button onClick={() => { setSelectedBusiness(null); setStaffList([]); setVerifyingId(null) }} style={{ background: 'none', border: 'none', color: theme.tealDeep, fontSize: 13, fontWeight: 700 }}>Change company</button>
             </div>
 
             {loadingStaff && <p style={{ color: theme.textMid, fontSize: 13 }}>Loading team...</p>}
@@ -186,17 +202,48 @@ function ClaimStaffPosition() {
                   <p style={{ margin: '0 0 10px 0', color: theme.tealDeep, fontSize: 12.5, fontWeight: 700 }}>
                     {s.public_title || s.role}
                   </p>
-                  <button
-                    onClick={() => handleClaim(s.staff_id)}
-                    disabled={alreadyClaimed(s.staff_id) || submittingId === s.staff_id}
-                    style={{
-                      padding: '8px 16px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 12,
-                      background: alreadyClaimed(s.staff_id) ? theme.bg : theme.tealGradient,
-                      color: alreadyClaimed(s.staff_id) ? theme.textLight : '#fff',
-                    }}
-                  >
-                    {alreadyClaimed(s.staff_id) ? 'Claim submitted' : submittingId === s.staff_id ? 'Submitting...' : 'This is me'}
-                  </button>
+
+                  {alreadyClaimed(s.staff_id) ? (
+                    <div style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, borderRadius: 12, background: theme.bg, color: theme.textLight, display: 'inline-block' }}>
+                      Claim submitted
+                    </div>
+                  ) : verifyingId === s.staff_id ? (
+                    <div>
+                      <p style={{ margin: '0 0 8px 0', fontSize: 12, color: theme.textLight }}>
+                        Enter the work email on your staff account to verify it's you:
+                      </p>
+                      <input
+                        type="email"
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        placeholder="you@company.ng"
+                        style={{ width: '100%', padding: 10, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 10, marginBottom: 8, boxSizing: 'border-box' }}
+                      />
+                      {claimError && <p style={{ margin: '0 0 8px 0', fontSize: 12, color: theme.alert }}>{claimError}</p>}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => { setVerifyingId(null); setClaimError('') }}
+                          style={{ flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 700, border: `1px solid ${theme.border}`, borderRadius: 12, background: '#fff', color: theme.textMid }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => submitClaim(s.staff_id)}
+                          disabled={submitting}
+                          style={{ flex: 2, padding: '8px 12px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 12, background: theme.tealGradient, color: '#fff' }}
+                        >
+                          {submitting ? 'Verifying...' : 'Verify & Submit Claim'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => startVerify(s.staff_id)}
+                      style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 12, background: theme.tealGradient, color: '#fff' }}
+                    >
+                      This is me
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
