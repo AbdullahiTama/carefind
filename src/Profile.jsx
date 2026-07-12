@@ -8,13 +8,14 @@ import { renderRichText, stripMarkers, previewText } from './richText.jsx'
 import ProductUpload from './ProductUpload.jsx'
 import { resizeImage } from './imageResize.js'
 import { MAX_PRICE_COINS, coinsToNaira } from './subscriptions.js'
-import { getActiveBusiness, setActiveBusiness, clearActiveBusiness } from './lib/activeIdentity'
+import { getActiveBusiness, setActiveBusiness, clearActiveBusiness, getActiveStaffIdentity, setActiveStaffIdentity, clearActiveStaffIdentity, getActiveIdentity } from './lib/activeIdentity'
 
 function Profile() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [ownedBusinesses, setOwnedBusinesses] = useState([])
+  const [approvedClaims, setApprovedClaims] = useState([])
   const [postCount, setPostCount] = useState(0)
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
@@ -32,6 +33,7 @@ function Profile() {
   const [subPrice, setSubPrice] = useState(0)
   const [savingPrice, setSavingPrice] = useState(false)
   const [activeBiz, setActiveBiz] = useState(getActiveBusiness())
+  const [activeStaff, setActiveStaff] = useState(getActiveStaffIdentity())
   const [activeTab, setActiveTab] = useState('posts')
   const [myPosts, setMyPosts] = useState([])
   const [savedPosts, setSavedPosts] = useState([])
@@ -62,12 +64,23 @@ function Profile() {
     loadMyReviews()
     loadMyStories()
     loadMyShows()
+    loadApprovedClaims()
   }, [user])
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  async function loadApprovedClaims() {
+    if (!user) return
+    const { data } = await supabase
+      .from('staff_claims')
+      .select('id, staff_id, status, staff:staff_id(id, full_name, public_title, business_id, businesses(name))')
+      .eq('user_id', user.id)
+      .eq('status', 'approved')
+    setApprovedClaims(data || [])
+  }
 
   async function loadMyPosts() {
     if (!user) return
@@ -277,15 +290,32 @@ function Profile() {
   function switchToBusiness(biz) {
     setActiveBusiness(biz)
     setActiveBiz({ id: biz.id, name: biz.name })
+    setActiveStaff(null)
+  }
+
+  function switchToStaff(claim) {
+    const identity = {
+      staffId: claim.staff_id,
+      fullName: claim.staff?.full_name,
+      publicTitle: claim.staff?.public_title,
+      businessId: claim.staff?.business_id,
+      businessName: claim.staff?.businesses?.name,
+    }
+    setActiveStaffIdentity(identity)
+    setActiveStaff(identity)
+    setActiveBiz(null)
   }
 
   function switchToPersonal() {
     clearActiveBusiness()
+    clearActiveStaffIdentity()
     setActiveBiz(null)
+    setActiveStaff(null)
   }
 
   async function handleSignOut() {
     clearActiveBusiness()
+    clearActiveStaffIdentity()
     await signOut()
     navigate('/login')
   }
@@ -293,16 +323,19 @@ function Profile() {
   if (loading) return <div style={{ padding: 20, fontFamily: 'system-ui' }}>Loading...</div>
 
   const displayLabel = profile?.full_name || profile?.display_name || 'CareFind User'
+  const hasAnyIdentity = ownedBusinesses.length > 0 || approvedClaims.length > 0
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 90 }}>
       {/* Posting-as banner */}
-      {activeBiz && (
+      {(activeBiz || activeStaff) && (
         <div style={{ background: theme.navy, color: '#fff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16 }}>🏢</span>
+          <span style={{ fontSize: 16 }}>{activeStaff ? '🎖️' : '🏢'}</span>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800 }}>Posting as {activeBiz.name}</p>
-            <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.6)' }}>Your posts, comments & news use this business</p>
+            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800 }}>
+              Posting as {activeStaff ? (activeStaff.publicTitle || 'Rep') + ' · ' + activeStaff.businessName : activeBiz.name}
+            </p>
+            <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(255,255,255,0.6)' }}>Your posts, comments & news use this identity</p>
           </div>
           <button onClick={switchToPersonal} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 16, padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
             Switch back
@@ -518,23 +551,23 @@ function Profile() {
         {/* My Businesses + Post-as switcher */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <p style={{ fontSize: 12, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>My Businesses</p>
+            <p style={{ fontSize: 12, fontWeight: 800, color: theme.tealDeep, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>My Businesses & Positions</p>
             <Link to="/business-dashboard" style={{ fontSize: 12, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none' }}>Manage →</Link>
           </div>
 
-          {ownedBusinesses.length === 0 && (
+          {!hasAnyIdentity && (
             <div style={{ border: `1px dashed ${theme.border}`, borderRadius: 14, padding: 16, textAlign: 'center' }}>
-              <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textLight }}>You don't manage any businesses yet.</p>
+              <p style={{ margin: '0 0 8px 0', fontSize: 13, color: theme.textLight }}>You don't manage any businesses or positions yet.</p>
               <Link to="/claim-business" style={{ fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none', display: 'block', marginBottom: 6 }}>Claim a business →</Link>
               <Link to="/claim-staff-position" style={{ fontSize: 12.5, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none', display: 'block' }}>Claim your position at a company →</Link>
             </div>
           )}
 
           {/* Personal identity option */}
-          {ownedBusinesses.length > 0 && (
+          {hasAnyIdentity && (
             <div
               onClick={switchToPersonal}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${!activeBiz ? theme.tealDeep : theme.border}`, background: !activeBiz ? '#ecfdf5' : theme.cardBg, marginBottom: 8, cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${!activeBiz && !activeStaff ? theme.tealDeep : theme.border}`, background: !activeBiz && !activeStaff ? '#ecfdf5' : theme.cardBg, marginBottom: 8, cursor: 'pointer' }}
             >
               <div style={{ width: 40, height: 40, borderRadius: '50%', background: theme.tealGradient, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 15 }}>
                 {displayLabel[0]?.toUpperCase()}
@@ -543,7 +576,7 @@ function Profile() {
                 <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: theme.navy }}>{displayLabel} <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600 }}>(you)</span></p>
                 <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>Personal account</p>
               </div>
-              {!activeBiz && <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>}
+              {!activeBiz && !activeStaff && <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>}
             </div>
           )}
 
@@ -563,6 +596,31 @@ function Profile() {
                   <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>
                 ) : (
                   <button onClick={() => switchToBusiness(b)} style={{ background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 16, padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
+                    Post as
+                  </button>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Approved staff position options */}
+          {approvedClaims.map((c) => {
+            const isActive = activeStaff?.staffId === c.staff_id
+            const businessName = c.staff?.businesses?.name || 'Company'
+            const title = c.staff?.public_title || 'Team Member'
+            return (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${isActive ? theme.tealDeep : theme.border}`, background: isActive ? '#ecfdf5' : theme.cardBg, marginBottom: 8 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: theme.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
+                  🎖️
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{businessName}</p>
+                </div>
+                {isActive ? (
+                  <span style={{ fontSize: 11, fontWeight: 800, color: theme.tealDeep }}>✓ Active</span>
+                ) : (
+                  <button onClick={() => switchToStaff(c)} style={{ background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 16, padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
                     Post as
                   </button>
                 )}
