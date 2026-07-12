@@ -19,6 +19,7 @@ import { resizeImage } from './imageResize.js'
 import { loadActiveCreatorIds, coinsToNaira } from './subscriptions.js'
 import SupportPrompt from './SupportPrompt.jsx'
 import Stories from './Stories.jsx'
+import { getActiveIdentity } from './lib/activeIdentity'
 import { useRef } from 'react'
 
 function Feed() {
@@ -157,7 +158,7 @@ function Feed() {
     setLoading(true)
     const { data: postData, error } = await supabase
       .from('posts')
-      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only, audio_url, video_url')
+      .select('id, content, created_at, user_id, post_type, theme, image_url, rating, view_count, subscriber_only, audio_url, video_url, posted_as_type, posted_as_id, posted_as_name, posted_as_title')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -461,6 +462,8 @@ function Feed() {
       return
     }
 
+    const identity = getActiveIdentity()
+
     const { error } = await supabase.from('posts').insert({
       user_id: user.id,
       content: content.trim(),
@@ -471,6 +474,10 @@ function Feed() {
       theme: postType === 'visual' ? visualTheme : null,
       rating: postType === 'review' ? postRating : null,
       image_url: imageUrl,
+      posted_as_type: identity ? identity.type : null,
+      posted_as_id: identity ? (identity.type === 'business' ? identity.id : identity.staffId) : null,
+      posted_as_name: identity ? (identity.type === 'business' ? identity.name : identity.businessName) : null,
+      posted_as_title: identity && identity.type === 'staff' ? identity.publicTitle : null,
     })
 
     // If it's a review and a target is tagged, also write to the intelligence layer
@@ -917,6 +924,19 @@ function Feed() {
           marginTop: 18, marginBottom: 16, background: theme.cardBg, border: `1px solid ${theme.border}`,
           borderRadius: 18, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
         }}>
+          {(() => {
+            const idn = getActiveIdentity()
+            if (!idn) return null
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 12, background: theme.navy, marginBottom: 12 }}>
+                <span style={{ fontSize: 16 }}>{idn.type === 'staff' ? '🎖️' : '🏢'}</span>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#fff' }}>
+                  Posting as {idn.type === 'staff' ? (idn.publicTitle || 'Rep') + ' · ' + idn.businessName : idn.name}
+                </p>
+              </div>
+            )
+          })()}
+
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
             {Object.keys(postTypeLabels).map((t) => (
               <button
@@ -1322,16 +1342,20 @@ function Feed() {
                 <div style={{ position: 'relative', flexShrink: 0, marginBottom: user && post.user_id !== user.id ? 4 : 0 }}>
                   <div
                     style={{
-                      width: 38, height: 38, borderRadius: '50%',
-                      background: profiles[post.user_id]?.avatar_url
-                        ? `url(${profiles[post.user_id].avatar_url}) center/cover`
-                        : theme.tealGradient,
+                      width: 38, height: 38, borderRadius: post.posted_as_type ? 10 : '50%',
+                      background: post.posted_as_type
+                        ? theme.navy
+                        : (profiles[post.user_id]?.avatar_url
+                            ? `url(${profiles[post.user_id].avatar_url}) center/cover`
+                            : theme.tealGradient),
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       color: '#fff', fontSize: 14, fontWeight: 800,
                     }}
                   >
-                    {!profiles[post.user_id]?.avatar_url &&
-                      (profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase()}
+                    {post.posted_as_type
+                      ? (post.posted_as_type === 'staff' ? '🎖️' : '🏢')
+                      : (!profiles[post.user_id]?.avatar_url &&
+                          (profiles[post.user_id]?.full_name?.[0] || profiles[post.user_id]?.display_name?.[0] || '?').toUpperCase())}
                   </div>
 
                   {/* Follow badge sitting on the avatar (TikTok-style) */}
@@ -1359,24 +1383,34 @@ function Feed() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 14, fontWeight: 800, color: theme.navy }}>
-                      {profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || 'User'}
+                      {post.posted_as_type ? post.posted_as_name : (profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || 'User')}
                     </span>
-                    {profiles[post.user_id]?.is_verified && (
+                    {!post.posted_as_type && profiles[post.user_id]?.is_verified && (
                       <span style={{
                         width: 14, height: 14, borderRadius: '50%', background: theme.tealDeep, color: '#fff',
                         fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900,
                       }}>✓</span>
                     )}
                   </div>
-                  {profiles[post.user_id]?.display_name && (
-                    <span style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 600, display: 'block' }}>
-                      @{profiles[post.user_id].display_name}
+                  {post.posted_as_type ? (
+                    <span style={{ fontSize: 11.5, color: theme.tealDeep, fontWeight: 700, display: 'block' }}>
+                      {post.posted_as_type === 'staff' && post.posted_as_title ? post.posted_as_title : 'Business'}
+                      {' · posted by '}
+                      {profiles[post.user_id]?.full_name || profiles[post.user_id]?.display_name || 'team member'}
                     </span>
-                  )}
-                  {profiles[post.user_id]?.is_verified && (profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label) && (
-                    <span style={{ fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>
-                      ✓ {profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label}
-                    </span>
+                  ) : (
+                    <>
+                      {profiles[post.user_id]?.display_name && (
+                        <span style={{ fontSize: 11.5, color: theme.textLight, fontWeight: 600, display: 'block' }}>
+                          @{profiles[post.user_id].display_name}
+                        </span>
+                      )}
+                      {profiles[post.user_id]?.is_verified && (profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label) && (
+                        <span style={{ fontSize: 11, color: theme.tealDeep, fontWeight: 700 }}>
+                          ✓ {profiles[post.user_id]?.specialty || profiles[post.user_id]?.verification_label}
+                        </span>
+                      )}
+                    </>
                   )}
                   <span style={{ fontSize: 11, color: theme.textLight, fontWeight: 600, display: 'block' }}>{timeAgo(post.created_at)}</span>
                 </div>
