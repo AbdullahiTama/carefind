@@ -5,6 +5,13 @@ import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 import { notify } from './notify.js'
 
+// Coins can be fractional after the platform fee — show the real number.
+function fmtCoins(n) {
+  const v = Number(n) || 0
+  if (Number.isInteger(v)) return String(v)
+  return String(parseFloat(v.toFixed(4)))
+}
+
 const GIFTS = [
   { emoji: '💊', name: 'Pill', coins: 1 },
   { emoji: '⭐', name: 'Star', coins: 5 },
@@ -159,7 +166,7 @@ function GiftPanel({ postId, recipientId, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', borderRadius: 12, padding: '10px 14px', marginBottom: 16 }}>
           <div>
             <p style={{ margin: 0, fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>YOUR CARECOINS</p>
-            <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: theme.tealBright }}>🪙 {wallet?.balance || 0}</p>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: theme.tealBright }}>🪙 {fmtCoins(wallet?.balance)}</p>
           </div>
           <Link to="/wallet" onClick={onClose} style={{ background: theme.tealGradient, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
             + Top Up
