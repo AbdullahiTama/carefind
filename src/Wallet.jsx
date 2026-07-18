@@ -21,82 +21,73 @@ function Wallet() {
   const [tab, setTab] = useState('wallet')
   const [searchParams] = useSearchParams()
 
-  // Handle return from Paystack redirect
+  // Always read the balance back from the database — never trust a local guess.
+  async function refresh() {
+    if (!user) return
+    const { data: walletData, error: wErr } = await supabase
+      .from('wallets').select('*').eq('user_id', user.id).maybeSingle()
+
+    if (wErr) {
+      alert('Could not load wallet: ' + wErr.message)
+      return
+    }
+    setWallet(walletData || { balance: 0 })
+
+    const { data: txData } = await supabase
+      .from('transactions').select('*').eq('user_id', user.id)
+      .order('created_at', { ascending: false }).limit(20)
+    setTransactions(txData || [])
+  }
+
+  // Coming back from Paystack
   useEffect(() => {
     async function handlePaystackReturn() {
       const ref = searchParams.get('reference')
       const coins = searchParams.get('coins')
       const naira = searchParams.get('naira')
+      if (!ref || !coins || !user) return
 
-      if (ref && coins && user) {
-        // Check if already processed
-        const { data: existing } = await supabase
-          .from('transactions')
-          .select('id')
-          .eq('reference', ref)
-          .maybeSingle()
+      // credit_wallet is atomic and refuses to credit the same reference twice,
+      // so a refresh on this URL can't double your coins.
+      const { data, error } = await supabase.rpc('credit_wallet', {
+        p_user: user.id,
+        p_coins: parseInt(coins),
+        p_reference: ref,
+        p_naira: parseInt(naira || '0') * 100,
+      })
 
-        if (!existing) {
-          const newCoins = parseInt(coins)
+      window.history.replaceState({}, '', '/wallet')
 
-          // Get fresh wallet balance from DB
-          const { data: freshWallet } = await supabase
-            .from('wallets')
-            .select('balance')
-            .eq('user_id', user.id)
-            .maybeSingle()
+      if (error) {
+        alert('Top-up could not be credited: ' + error.message)
+        return
+      }
 
-          const currentBalance = freshWallet?.balance || 0
-          const newBalance = currentBalance + newCoins
+      await refresh()
 
-          await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', user.id)
-          await supabase.from('transactions').insert({
-            user_id: user.id, type: 'topup', amount: newCoins,
-            naira_amount: parseInt(naira) * 100, reference: ref, status: 'success',
-          })
-
-          // Reload wallet and transactions
-          setWallet((prev) => ({ ...(prev || {}), balance: newBalance }))
-
-          const { data: txData } = await supabase
-            .from('transactions').select('*').eq('user_id', user.id)
-            .order('created_at', { ascending: false }).limit(20)
-          setTransactions(txData || [])
-
-          setTab('history')
-          window.history.replaceState({}, '', '/wallet')
-          alert(`✅ ${newCoins} CareCoin${newCoins > 1 ? 's' : ''} added! New balance: ${newBalance} coins`)
-        } else {
-          // Already processed — just clean the URL
-          window.history.replaceState({}, '', '/wallet')
-        }
+      if (data === 'ok') {
+        setTab('history')
+        alert(`✅ ${coins} CareCoin${parseInt(coins) > 1 ? 's' : ''} added to your wallet.`)
+      } else if (data === 'duplicate') {
+        // Already credited on a previous visit — say nothing, just show the balance
+        setTab('history')
+      } else {
+        alert('Top-up failed: ' + data)
       }
     }
     if (!authLoading && user) handlePaystackReturn()
+    // eslint-disable-next-line
   }, [searchParams, user, authLoading])
 
   useEffect(() => {
     async function load() {
       if (!user) { setLoading(false); return }
       setLoading(true)
-
-      let { data: walletData } = await supabase
-        .from('wallets').select('*').eq('user_id', user.id).maybeSingle()
-
-      if (!walletData) {
-        const { data: newWallet } = await supabase
-          .from('wallets').insert({ user_id: user.id, balance: 0 }).select().single()
-        walletData = newWallet
-      }
-      setWallet(walletData)
-
-      const { data: txData } = await supabase
-        .from('transactions').select('*').eq('user_id', user.id)
-        .order('created_at', { ascending: false }).limit(20)
-      setTransactions(txData || [])
+      await refresh()
       setLoading(false)
     }
     if (!authLoading) load()
+    // eslint-disable-next-line
   }, [user, authLoading])
 
   async function handleTopUp(pkg) {
@@ -136,7 +127,8 @@ function Wallet() {
     return `${Math.floor(diff / 86400)}d ago`
   }
 
-  const txIcon = (type) => ({ topup: '🪙', gift_sent: '🎁', gift_received: '💰', withdrawal: '🏦' }[type] || '💳')
+  const txIcon = (type) => ({ topup: '🪙', gift_sent: '🎁', gift_received: '💰', withdrawal: '🏦', subscription: '🔒', subscription_earning: '💎' }[type] || '💳')
+  const isCredit = (type) => type === 'topup' || type === 'gift_received' || type === 'subscription_earning'
 
   if (authLoading || loading) return <div style={{ padding: 20, fontFamily: 'system-ui, sans-serif' }}>Loading...</div>
 
@@ -229,13 +221,13 @@ function Wallet() {
                   <span style={{ fontSize: 22 }}>{txIcon(tx.type)}</span>
                   <div>
                     <p style={{ margin: '0 0 2px 0', fontSize: 13.5, fontWeight: 700, color: theme.navy, textTransform: 'capitalize' }}>
-                      {tx.type.replace('_', ' ')}
+                      {String(tx.type || '').replace(/_/g, ' ')}
                     </p>
                     <p style={{ margin: 0, fontSize: 11, color: theme.textLight }}>{timeAgo(tx.created_at)}</p>
                   </div>
                 </div>
-                <p style={{ margin: 0, fontWeight: 900, fontSize: 14, color: tx.type === 'topup' || tx.type === 'gift_received' ? theme.success : theme.alert }}>
-                  {tx.type === 'topup' || tx.type === 'gift_received' ? '+' : '-'}{tx.amount} 🪙
+                <p style={{ margin: 0, fontWeight: 900, fontSize: 14, color: isCredit(tx.type) ? theme.success : theme.alert }}>
+                  {isCredit(tx.type) ? '+' : '-'}{Math.abs(tx.amount)} 🪙
                 </p>
               </div>
             ))}
