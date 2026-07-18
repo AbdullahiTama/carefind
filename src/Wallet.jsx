@@ -6,6 +6,21 @@ import { theme } from './lib/theme'
 import BottomNav from './BottomNav.jsx'
 
 const COIN_VALUE_NAIRA = 200
+
+// Coins can be fractional (a 20% fee on 1 coin leaves 0.8).
+// Show the exact amount — never round someone's earnings down to zero.
+function fmtCoins(n) {
+  const v = Number(n) || 0
+  if (Number.isInteger(v)) return String(v)
+  return String(parseFloat(v.toFixed(4)))
+}
+
+function fmtNaira(coins) {
+  const v = (Number(coins) || 0) * COIN_VALUE_NAIRA
+  return Number.isInteger(v)
+    ? v.toLocaleString()
+    : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 const TOPUP_PACKAGES = [
   { coins: 1, naira: 200, label: 'Starter' },
   { coins: 5, naira: 950, label: 'Popular', savings: 50 },
@@ -149,9 +164,9 @@ function Wallet() {
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: '0 0 20px 0' }}>CareCoins — 1 coin = ₦{COIN_VALUE_NAIRA}</p>
         <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 20, padding: 20, textAlign: 'center' }}>
           <p style={{ margin: '0 0 4px 0', fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>BALANCE</p>
-          <p style={{ margin: '0 0 4px 0', fontSize: 42, fontWeight: 900 }}>🪙 {wallet?.balance || 0}</p>
+          <p style={{ margin: '0 0 4px 0', fontSize: 42, fontWeight: 900 }}>🪙 {fmtCoins(wallet?.balance)}</p>
           <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-            ≈ ₦{((wallet?.balance || 0) * COIN_VALUE_NAIRA).toLocaleString()}
+            ≈ ₦{fmtNaira(wallet?.balance)}
           </p>
         </div>
       </div>
@@ -227,7 +242,7 @@ function Wallet() {
                   </div>
                 </div>
                 <p style={{ margin: 0, fontWeight: 900, fontSize: 14, color: isCredit(tx.type) ? theme.success : theme.alert }}>
-                  {isCredit(tx.type) ? '+' : '-'}{Math.abs(tx.amount)} 🪙
+                  {isCredit(tx.type) ? '+' : '-'}{fmtCoins(Math.abs(Number(tx.amount) || 0))} 🪙
                 </p>
               </div>
             ))}
@@ -241,7 +256,7 @@ function Wallet() {
               Minimum: <strong>5 CareCoins (₦800 after 20% platform fee)</strong>.
             </p>
             <p style={{ fontSize: 13, color: theme.textMid, margin: '0 0 16px 0' }}>
-              Your balance: <strong>🪙 {wallet?.balance || 0} CareCoins</strong>
+              Your balance: <strong>🪙 {fmtCoins(wallet?.balance)} CareCoins</strong>
             </p>
             {(wallet?.balance || 0) >= 5 ? (
               <button style={{
