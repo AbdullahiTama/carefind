@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
+import { notify } from './notify.js'
 
 const GIFTS = [
   { emoji: '💊', name: 'Pill', coins: 1 },
@@ -19,6 +20,7 @@ function GiftAnimation({ gift, onDone }) {
   useEffect(() => {
     const timer = setTimeout(onDone, 2200)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line
   }, [])
 
   return (
@@ -68,17 +70,17 @@ function GiftPanel({ postId, recipientId, onClose }) {
   const [sending, setSending] = useState(false)
   const [animation, setAnimation] = useState(null)
 
+  async function loadWallet() {
+    if (!user) return
+    // Only ever read your OWN wallet — RLS blocks reading anyone else's.
+    const { data } = await supabase
+      .from('wallets').select('balance').eq('user_id', user.id).maybeSingle()
+    setWallet(data || { balance: 0 })
+  }
+
   useEffect(() => {
-    async function loadWallet() {
-      if (!user) return
-      let { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).maybeSingle()
-      if (!data) {
-        const { data: newW } = await supabase.from('wallets').insert({ user_id: user.id, balance: 0 }).select().single()
-        data = newW
-      }
-      setWallet(data)
-    }
     loadWallet()
+    // eslint-disable-next-line
   }, [user])
 
   async function sendGift() {
@@ -89,36 +91,46 @@ function GiftPanel({ postId, recipientId, onClose }) {
     }
     setSending(true)
 
-    const newBalance = (wallet?.balance || 0) - selected.coins
-    const recipientGain = Math.floor(selected.coins * 0.8) // 80% to recipient
-
-    await supabase.from('wallets').update({ balance: newBalance }).eq('user_id', user.id)
-
-    // Credit recipient
-    const { data: recipientWallet } = await supabase.from('wallets').select('balance').eq('user_id', recipientId).maybeSingle()
-    if (recipientWallet) {
-      await supabase.from('wallets').update({ balance: recipientWallet.balance + recipientGain }).eq('user_id', recipientId)
-    } else {
-      await supabase.from('wallets').insert({ user_id: recipientId, balance: recipientGain })
-    }
-
-    // Log gift
-    await supabase.from('gifts').insert({
-      sender_id: user.id,
-      recipient_id: recipientId,
-      post_id: postId,
-      gift_type: selected.name,
-      gift_emoji: selected.emoji,
-      coins: selected.coins,
+    // One atomic call: debit sender, credit recipient, log the gift and both
+    // transactions. Runs as security definer so it can write the recipient's
+    // wallet — the client never can, because of RLS.
+    const { data, error } = await supabase.rpc('send_gift', {
+      p_sender: user.id,
+      p_recipient: recipientId,
+      p_coins: selected.coins,
+      p_post_id: postId || null,
+      p_gift_type: selected.name,
+      p_gift_emoji: selected.emoji,
     })
 
-    // Log transactions
-    await supabase.from('transactions').insert({ user_id: user.id, type: 'gift_sent', amount: selected.coins, status: 'success' })
-    await supabase.from('transactions').insert({ user_id: recipientId, type: 'gift_received', amount: recipientGain, status: 'success' })
-
-    setWallet((prev) => ({ ...prev, balance: newBalance }))
-    setAnimation(selected)
     setSending(false)
+
+    if (error) {
+      alert('Gift failed: ' + error.message)
+      return
+    }
+    if (data === 'insufficient') {
+      alert('Not enough CareCoins! Top up your wallet first.')
+      await loadWallet()
+      return
+    }
+    if (data !== 'ok') {
+      alert('Gift failed: ' + data)
+      return
+    }
+
+    // Read the real balance back rather than guessing locally
+    await loadWallet()
+
+    notify({
+      recipientId,
+      actorId: user.id,
+      type: 'gift',
+      message: `sent you a ${selected.emoji} ${selected.name}`,
+      link: postId ? `/post/${postId}` : `/u/${user.id}`,
+    })
+
+    setAnimation(selected)
   }
 
   if (!user) {
