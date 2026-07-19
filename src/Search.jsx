@@ -12,6 +12,32 @@ const NG_STATES = [
   'Sokoto','Taraba','Yobe','Zamfara',
 ]
 
+// Straight-line distance between two points, in kilometres (haversine).
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+// "850 m away" under a kilometre, "3.4 km away" above it.
+function fmtDistance(km) {
+  if (km == null) return null
+  if (km < 1) return Math.round(km * 1000) + ' m away'
+  if (km < 10) return km.toFixed(1) + ' km away'
+  return Math.round(km) + ' km away'
+}
+
+// Colour per seller type so wholesale/distributor/importer read differently at a glance.
+const SALE_TYPE_STYLE = {
+  wholesale: { color: '#7c3aed', background: '#f3e8ff' },
+  distributor: { color: '#c2410c', background: '#ffedd5' },
+  importer: { color: '#0369a1', background: '#e0f2fe' },
+  manufacturer: { color: '#9f1239', background: '#ffe4e6' },
+}
+
 function Search() {
   const { user } = useAuth()
   const [query, setQuery] = useState('')
@@ -24,6 +50,8 @@ function Search() {
   const [loading, setLoading] = useState(false)
   const [featured, setFeatured] = useState([])
   const [featuredType, setFeaturedType] = useState('promo') // 'promo' or 'product'
+  const [myLoc, setMyLoc] = useState(null)
+  const [locStatus, setLocStatus] = useState('idle') // idle | asking | on | denied
   const trackRef = useRef(null)
 
   // JS-driven marquee — works even in iOS Low Power Mode (CSS animations get paused, JS doesn't)
@@ -49,6 +77,65 @@ function Search() {
   useEffect(() => { loadFeatured() }, [])
   useEffect(() => { runSearch() }, [tab, stateFilter, specialtyFilter])
 
+  // Reads where the person is RIGHT NOW. The browser only shows its permission
+  // prompt the first time; after that this is silent. Because it re-reads on
+  // every search, someone who searches in Lagos today and Abuja tomorrow gets
+  // the right nearby pharmacies both times — no second prompt, no stale city.
+  function getLocation(allowPrompt) {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) { setLocStatus('denied'); resolve(null); return }
+      // They already said no — don't nag them on every search.
+      if (locStatus === 'denied' && !allowPrompt) { resolve(null); return }
+      if (locStatus === 'idle' && !allowPrompt) { resolve(null); return }
+
+      setLocStatus((s) => (s === 'on' ? 'on' : 'asking'))
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+          setMyLoc(coords)
+          setLocStatus('on')
+          resolve(coords)
+        },
+        () => {
+          setLocStatus('denied')
+          resolve(null)
+        },
+        // maximumAge lets the browser reuse a fix from the last 2 minutes,
+        // so repeated searches are instant without draining the battery.
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 120000 }
+      )
+    })
+  }
+
+  // Tapping the button is the one place we're allowed to prompt.
+  async function askLocation() {
+    const coords = await getLocation(true)
+    if (!coords) {
+      alert('Location was not allowed. Results will not be sorted by distance.')
+      return
+    }
+    runSearch()
+  }
+
+  // Adds a _km field to anything that has coordinates, then puts the
+  // closest first. Sellers with no coordinates fall to the bottom.
+  function byDistance(rows, getLat, getLng, loc) {
+    if (!loc) return rows
+    return rows
+      .map((r) => {
+        const la = getLat(r)
+        const ln = getLng(r)
+        const km = la != null && ln != null ? distanceKm(loc.lat, loc.lng, la, ln) : null
+        return { ...r, _km: km }
+      })
+      .sort((a, b) => {
+        if (a._km == null && b._km == null) return 0
+        if (a._km == null) return 1
+        if (b._km == null) return -1
+        return a._km - b._km
+      })
+  }
+
   async function loadFeatured() {
     const { data } = await supabase
       .from('promotions')
@@ -64,7 +151,7 @@ function Search() {
     // Fallback: auto-pull products if no active promotions
     const { data: prods } = await supabase
       .from('products')
-      .select('id, name, emoji, price, business_id, list_on_carefind, businesses(name)')
+      .select('id, name, emoji, price, business_id, list_on_carefind, businesses(name, show_price_on_carefind)')
       .order('created_at', { ascending: false })
       .limit(14)
     setFeatured((prods || []).filter(p => p.list_on_carefind !== false))
@@ -77,22 +164,32 @@ function Search() {
     const q = query.trim()
     let resultCount = 0
 
+    // Someone looking for medication wants what's near them NOW. Ask the first
+    // time they search; after that the browser answers silently and instantly.
+    let loc = myLoc
+    if (tab === 'products' || tab === 'businesses') {
+      const firstTime = locStatus === 'idle'
+      const fresh = await getLocation(firstTime)
+      if (fresh) loc = fresh
+    }
+
     if (tab === 'products') {
-      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, seller_location, business_id, list_on_carefind, businesses(name, city, state, whatsapp)')
+      let pq = supabase.from('products').select('id, name, emoji, price, category, generic_name, whatsapp, image_url, sale_type, price_unit, min_purchase, seller_location, business_id, list_on_carefind, businesses(name, city, state, whatsapp, lat, lng, show_price_on_carefind)')
       if (q) pq = pq.or(`name.ilike.%${q}%,generic_name.ilike.%${q}%,category.ilike.%${q}%`)
       const { data } = await pq.limit(40)
       let list = (data || []).filter(p => p.list_on_carefind !== false)
       if (stateFilter) list = list.filter(p => (p.businesses?.state || '').toLowerCase().includes(stateFilter.toLowerCase()))
+      list = byDistance(list, (p) => p.businesses?.lat, (p) => p.businesses?.lng, loc)
       setProducts(list)
       setBusinesses([]); setProfessionals([])
       resultCount = list.length
     }
     else if (tab === 'businesses') {
-      let bq = supabase.from('businesses').select('id, name, business_type, city, state, cover_url, whatsapp').eq('visible_on_carefind', true)
+      let bq = supabase.from('businesses').select('id, name, business_type, city, state, cover_url, whatsapp, lat, lng').eq('visible_on_carefind', true)
       if (q) bq = bq.ilike('name', `%${q}%`)
       if (stateFilter) bq = bq.ilike('state', `%${stateFilter}%`)
       const { data } = await bq.limit(40)
-      setBusinesses(data || [])
+      setBusinesses(byDistance(data || [], (b) => b.lat, (b) => b.lng, loc))
       setProducts([]); setProfessionals([])
       resultCount = (data || []).length
     }
@@ -179,6 +276,17 @@ function Search() {
         {stateFilter && (
           <button onClick={() => setStateFilter('')} style={{ marginTop: 6, padding: '4px 10px', background: 'none', border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 11, color: theme.textLight }}>Clear location</button>
         )}
+
+        {locStatus !== 'on' ? (
+          <button onClick={askLocation} style={{ width: '100%', marginTop: 8, padding: '10px 12px', background: '#ecfdf5', border: `1px solid ${theme.tealDeep}`, borderRadius: 12, fontSize: 12.5, fontWeight: 800, color: theme.tealDeep }}>
+            {locStatus === 'asking' ? 'Finding you…' : locStatus === 'denied' ? '📍 Turn on location to see what is nearest' : '📍 Show me what is nearest'}
+          </button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8, padding: '8px 12px', background: '#ecfdf5', border: `1px solid ${theme.border}`, borderRadius: 12 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: theme.tealDeep }}>📍 Sorted by distance from you</span>
+            <button onClick={() => { setMyLoc(null); setLocStatus('idle') }} style={{ background: 'none', border: 'none', fontSize: 11, color: theme.textLight, fontWeight: 700 }}>Turn off</button>
+          </div>
+        )}
       </div>
 
       {showingFeatured && featured.length > 0 && (
@@ -203,7 +311,7 @@ function Search() {
                     <div style={{ border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, background: theme.cardBg, textAlign: 'center' }}>
                       <div style={{ fontSize: 30, marginBottom: 6 }}>{p.emoji || '💊'}</div>
                       <p style={{ margin: '0 0 3px 0', fontSize: 12.5, fontWeight: 800, color: theme.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                      {p.price != null && <p style={{ margin: '0 0 2px 0', fontSize: 12, fontWeight: 700, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+                      {p.price != null && p.businesses?.show_price_on_carefind !== false && <p style={{ margin: '0 0 2px 0', fontSize: 12, fontWeight: 700, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
                       <p style={{ margin: 0, fontSize: 10, color: theme.textLight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businesses?.name || ''}</p>
                     </div>
                   </Link>
@@ -249,6 +357,9 @@ function Search() {
                     {p.generic_name && <p style={{ margin: '0 0 2px 0', fontSize: 11.5, color: theme.textMid, fontStyle: 'italic' }}>{p.generic_name}</p>}
                     <p style={{ margin: '0 0 3px 0', fontSize: 10.5, color: theme.tealDeep, fontWeight: 700 }}>⭐ See reviews ›</p>
                   </Link>
+                  {p._km != null && (
+                    <p style={{ margin: '0 0 3px 0', fontSize: 11, fontWeight: 800, color: '#c2410c' }}>🚶 {fmtDistance(p._km)}</p>
+                  )}
                   {p.business_id ? (
                     <Link to={`/business/${p.business_id}`} style={{ margin: 0, fontSize: 12, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}>
                       {p.businesses?.name || 'View business'}
@@ -267,16 +378,23 @@ function Search() {
                     </p>
                   )}
                 </div>
-                {p.price != null && (
+                {p.price != null && p.businesses?.show_price_on_carefind !== false ? (
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>
                     {p.price_unit && <p style={{ margin: 0, fontSize: 9.5, color: theme.textLight }}>per {p.price_unit}</p>}
                   </div>
-                )}
+                ) : p.businesses?.show_price_on_carefind === false ? (
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: theme.textLight }}>Ask for price</p>
+                  </div>
+                ) : null}
               </div>
               {(p.sale_type || p.min_purchase) && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                  {p.sale_type && <span style={{ fontSize: 9.5, fontWeight: 800, color: p.sale_type === 'wholesale' ? '#7c3aed' : theme.tealDeep, background: p.sale_type === 'wholesale' ? '#f3e8ff' : '#ecfdf5', padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>{p.sale_type}</span>}
+                  {p.sale_type && (() => {
+                    const st = SALE_TYPE_STYLE[String(p.sale_type).toLowerCase()] || { color: theme.tealDeep, background: '#ecfdf5' }
+                    return <span style={{ fontSize: 9.5, fontWeight: 800, color: st.color, background: st.background, padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>{p.sale_type}</span>
+                  })()}
                   {p.min_purchase && <span style={{ fontSize: 9.5, fontWeight: 700, color: theme.textMid, background: theme.bg, padding: '2px 8px', borderRadius: 10 }}>Min {p.min_purchase} {p.price_unit || ''}{p.min_purchase > 1 ? 's' : ''}</span>}
                 </div>
               )}
@@ -297,6 +415,7 @@ function Search() {
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 2px 0', fontSize: 14, fontWeight: 800, color: theme.navy }}>{b.name}</p>
               <p style={{ margin: 0, fontSize: 12, color: theme.textLight, textTransform: 'capitalize' }}>{b.business_type} · {b.city}{b.state ? `, ${b.state}` : ''}</p>
+              {b._km != null && <p style={{ margin: '3px 0 0 0', fontSize: 11, fontWeight: 800, color: '#c2410c' }}>🚶 {fmtDistance(b._km)}</p>}
               <p style={{ margin: '3px 0 0 0', fontSize: 10.5, color: theme.tealDeep, fontWeight: 700 }}>⭐ See profile & reviews ›</p>
             </div>
           </Link>
