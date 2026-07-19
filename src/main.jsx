@@ -6,6 +6,8 @@ import Feed from './Feed.jsx'
 import Search from './Search.jsx'
 import BusinessProfile from './BusinessProfile.jsx'
 import Login from './Login.jsx'
+import ForgotPassword from './ForgotPassword.jsx'
+import ResetPassword from './ResetPassword.jsx'
 import Onboarding from './Onboarding.jsx'
 import Profile from './Profile.jsx'
 import PublicProfile from './PublicProfile.jsx'
@@ -46,6 +48,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/search" element={<Search />} />
           <Route path="/business/:id" element={<BusinessProfile />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/u/:id" element={<PublicProfile />} />
