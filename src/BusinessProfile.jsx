@@ -22,7 +22,7 @@ function BusinessProfile() {
 
     const { data: bizData } = await supabase
       .from('businesses')
-      .select('id, name, address, city, state, business_type, whatsapp, hours, maps_link, cover_url')
+      .select('id, name, address, city, state, business_type, whatsapp, hours, maps_link, cover_url, logo_url, description')
       .eq('id', id)
       .maybeSingle()
 
@@ -116,15 +116,24 @@ function BusinessProfile() {
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
-      <div style={{ background: theme.heroGradient, padding: '20px 20px 26px 20px', borderRadius: '0 0 28px 28px', color: '#fff' }}>
+      <div style={{
+        position: 'relative',
+        // Their own cover photo sits behind the header when they have uploaded
+        // one, with a dark wash over it so the white text stays readable.
+        background: biz.cover_url
+          ? `linear-gradient(rgba(6,32,38,0.72), rgba(6,32,38,0.86)), url(${biz.cover_url}) center/cover`
+          : theme.heroGradient,
+        padding: '20px 20px 26px 20px', borderRadius: '0 0 28px 28px', color: '#fff',
+      }}>
         <Link to="/search" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>← Back to search</Link>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
           <span style={{
-            width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0,
+            width: 46, height: 46, borderRadius: 14, flexShrink: 0,
+            background: biz.logo_url ? `url(${biz.logo_url}) center/cover` : 'rgba(255,255,255,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
           }}>
-            {typeIcons[biz.business_type] || '🏪'}
+            {!biz.logo_url && (typeIcons[biz.business_type] || '🏪')}
           </span>
           <div>
             <h1 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 2px 0', letterSpacing: '-0.01em' }}>{biz.name}</h1>
@@ -151,6 +160,9 @@ function BusinessProfile() {
       </div>
 
       <div style={{ padding: '20px 20px 0 20px' }}>
+        {biz.description && (
+          <p style={{ margin: '0 0 12px 0', fontSize: 13.5, color: theme.textMid, lineHeight: 1.6 }}>{biz.description}</p>
+        )}
         <p style={{ margin: '0 0 4px 0', fontSize: 13.5, color: theme.textMid }}>{biz.address}</p>
         {biz.hours && <p style={{ margin: '0 0 14px 0', color: theme.textLight, fontSize: 12.5 }}>Hours: {biz.hours}</p>}
 
