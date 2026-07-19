@@ -8,6 +8,7 @@ import BusinessProfile from './BusinessProfile.jsx'
 import Login from './Login.jsx'
 import ForgotPassword from './ForgotPassword.jsx'
 import ResetPassword from './ResetPassword.jsx'
+import RecoveryRedirect from './RecoveryRedirect.jsx'
 import Onboarding from './Onboarding.jsx'
 import Profile from './Profile.jsx'
 import PublicProfile from './PublicProfile.jsx'
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
       <BrowserRouter>
+        <RecoveryRedirect />
         <Routes>
           <Route path="/" element={<Feed />} />
           <Route path="/search" element={<Search />} />
