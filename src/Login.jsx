@@ -3,11 +3,24 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from './lib/AuthContext'
 import { theme } from './lib/theme'
 
+// Nigeria first because that is where most people are today, then the rest
+// alphabetically. Anyone can pick their own country at signup.
+const COUNTRIES = [
+  'Nigeria',
+  'Ghana', 'Kenya', 'South Africa', "Côte d'Ivoire", 'Egypt', 'Ethiopia', 'Rwanda',
+  'Senegal', 'Tanzania', 'Uganda', 'Zambia', 'Zimbabwe', 'Cameroon', 'Benin', 'Togo',
+  'Sierra Leone', 'Liberia', 'Gambia', 'Botswana', 'Namibia', 'Morocco', 'Algeria', 'Tunisia',
+  'United Kingdom', 'United States', 'Canada', 'Ireland', 'Germany', 'France', 'Netherlands',
+  'United Arab Emirates', 'Saudi Arabia', 'India', 'Pakistan', 'China', 'Australia',
+  'Other',
+]
+
 function Login() {
   const [authMethod, setAuthMethod] = useState('email')
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [country, setCountry] = useState('Nigeria')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -25,6 +38,9 @@ function Login() {
     if (authError) {
       setError(authError.message)
     } else if (isSignUp) {
+      // Onboarding picks this up and saves it with the rest of the profile,
+      // so signup itself stays down to email, password and country.
+      try { localStorage.setItem('carefind_signup_country', country) } catch (err) {}
       // New users go to onboarding to complete their profile
       navigate('/onboarding')
     } else {
@@ -91,6 +107,24 @@ function Login() {
                 style={{ padding: 13, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 13 }}
               />
 
+              {isSignUp && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: theme.textMid, marginBottom: 6 }}>
+                    Where are you?
+                  </label>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    style={{ width: '100%', padding: 13, fontSize: 14, border: `1px solid ${theme.border}`, borderRadius: 13, background: '#fff', boxSizing: 'border-box' }}
+                  >
+                    {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <p style={{ margin: '6px 0 0 0', fontSize: 11, color: theme.textLight }}>
+                    Helps us show you pharmacies and health facilities near you.
+                  </p>
+                </div>
+              )}
+
               {error && <p style={{ color: theme.alert, fontSize: 13, margin: 0 }}>{error}</p>}
 
               <button
@@ -103,6 +137,15 @@ function Login() {
               >
                 {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Log In'}
               </button>
+
+              {!isSignUp && (
+                <Link
+                  to="/forgot-password"
+                  style={{ textAlign: 'center', fontSize: 13, color: theme.tealDeep, fontWeight: 700, textDecoration: 'none' }}
+                >
+                  Forgot your password?
+                </Link>
+              )}
             </form>
           ) : (
             <p style={{ color: theme.textLight, fontSize: 13.5 }}>
