@@ -22,7 +22,7 @@ function BusinessProfile() {
 
     const { data: bizData } = await supabase
       .from('businesses')
-      .select('id, name, address, city, state, business_type, whatsapp, hours, maps_link, cover_url, logo_url, description')
+      .select('id, name, address, city, state, business_type, whatsapp, hours, maps_link, cover_url, logo_url, description, show_price_on_carefind')
       .eq('id', id)
       .maybeSingle()
 
@@ -220,7 +220,12 @@ function BusinessProfile() {
                 <p style={{ margin: '3px 0 0 0', fontSize: 10.5, color: theme.tealDeep, fontWeight: 700 }}>⭐ See reviews ›</p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                {p.price != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>}
+                {/* Respect the business's "show prices on CareFind" switch, the
+                    same way search results do — otherwise prices are hidden in
+                    one place and visible in another. */}
+                {biz.show_price_on_carefind === false
+                  ? <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: theme.textLight }}>Ask for price</p>
+                  : (p.price != null && <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: theme.tealDeep }}>₦{Number(p.price).toLocaleString()}</p>)}
                 {p.price_unit && <p style={{ margin: 0, fontSize: 10, color: theme.textLight }}>per {p.price_unit}</p>}
                 {p.stock != null && <p style={{ margin: 0, fontSize: 10.5, color: theme.textLight }}>Stock: {p.stock}</p>}
               </div>
